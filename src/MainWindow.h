@@ -14,6 +14,7 @@
 #include "Calculation/FreightCalculator.h"
 #include "Calculation/RuleManager.h"
 #include "UI/BannerWidget.h"
+#include "DataModel/CalculationHistory.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -51,6 +52,8 @@ private slots:
     void onNextPage();
     void onLastPage();
     void onRuleHelpClicked();  // 新增：规则说明
+    void onHistoryClicked();   // 新增：历史记录
+    void onChartClicked();     // 新增：生成图表
 
 private:
     Ui::MainWindow *ui;
@@ -78,6 +81,15 @@ private:
 
     bool m_isCalculating = false;
 
+    // 当前计算上下文（用于记录历史）
+    QString m_currentCalcMode;
+    QString m_currentCustomer;
+    int m_currentThreadCount = 8;
+    double m_currentAvgBase = 0.5;
+    double m_currentAvgLimit = 1.0;
+    double m_currentAvgStep = 0.1;
+    double m_currentAvgSurcharge = 0.1;
+
     void setupConnections();
     void setupStyle();
     void setupStatusBar();
@@ -96,6 +108,9 @@ private:
     void updatePageInfo();
     void displayPage(int page);
     void setupBanner();
+    void saveCalculationHistory();
+    QList<CalculationHistoryRecord> loadHistory() const;
+    QString historyFilePath() const;
 };
 
 #endif // MAINWINDOW_H

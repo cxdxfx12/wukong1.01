@@ -24,8 +24,16 @@
 #include "UI/QuickTestWidget.h"
 #include "UI/GlobalRulesDialog.h"
 #include "UI/RuleHelpDialog.h"
+#include "UI/HistoryDialog.h"
+#include "UI/ChartDialog.h"
 #include "Calculation/SimdCalculator.h"
 #include "Utils/Logger.h"
+
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QStandardPaths>
+#include <QFile>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -115,6 +123,8 @@ void MainWindow::setupConnections()
     connect(ui->globalRulesBtn, &QPushButton::clicked, this, &MainWindow::onGlobalRulesClicked);
     connect(ui->startCalcBtn, &QPushButton::clicked, this, &MainWindow::onCalculateClicked);
     connect(ui->ruleHelpBtn, &QPushButton::clicked, this, &MainWindow::onRuleHelpClicked);  // 新增：规则说明按钮
+    connect(ui->historyBtn, &QPushButton::clicked, this, &MainWindow::onHistoryClicked);    // 新增：历史记录按钮
+    connect(ui->chartBtn, &QPushButton::clicked, this, &MainWindow::onChartClicked);      // 新增：生成图表按钮
 
     connect(m_calculator, &FreightCalculator::progressUpdated, this, &MainWindow::throttledProgress);
     connect(m_calculator, &FreightCalculator::calculationComplete, this, &MainWindow::onCalculationComplete);
@@ -648,6 +658,15 @@ void MainWindow::onCalculateClicked()
 
     showCenterProgress(QStringLiteral("正在计算运费..."));
 
+    // 保存当前计算上下文，用于历史记录
+    m_currentCalcMode = ui->modeCombo->currentText();
+    m_currentCustomer = ui->customerCombo->currentText();
+    m_currentThreadCount = ui->threadSpin->value();
+    m_currentAvgBase = ui->avgBaseSpin->value();
+    m_currentAvgLimit = ui->avgLimitSpin->value();
+    m_currentAvgStep = ui->avgStepSpin->value();
+    m_currentAvgSurcharge = ui->avgSurchargeSpin->value();
+
     QPointer<MainWindow> self = this;
     QString mode = ui->modeCombo->currentText();
     int threadCount = ui->threadSpin->value();
@@ -1065,6 +1084,9 @@ void MainWindow::onCalculationComplete(int totalCount, int errorCount)
     m_currentPage = 1;
     updateTableView();
 
+    // 保存计算历史记录
+    saveCalculationHistory();
+
     auto *statusLabel = statusBar()->findChild<QLabel*>(QStringLiteral("statusLabel"));
     if (statusLabel)
         statusLabel->setText(QStringLiteral("计算完成"));
@@ -1238,4 +1260,138 @@ void MainWindow::onRuleHelpClicked()
 {
     RuleHelpDialog *dialog = new RuleHelpDialog(this);
     dialog->show();
+}
+
+// ============================================================================
+// 历史记录功能
+// ============================================================================
+
+QString MainWindow::historyFilePath() const
+{
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(dir);
+    return dir + QStringLiteral("/calculation_history.json");
+}
+
+void MainWindow::saveCalculationHistory()
+{
+    // 构建历史记录
+    CalculationHistoryRecord rec;
+    rec.timestamp = QDateTime::currentDateTime();
+    rec.totalCount = m_currentOrders.size();
+
+    int errorCount = 0;
+    double totalFreight = 0.0;
+    for (const OrderData &order : m_currentOrders) {
+        if (!order.isValid && !order.errorMessage.isEmpty()) {
+            errorCount++;
+        }
+        totalFreight += order.freight;
+    }
+    rec.successCount = rec.totalCount - errorCount;
+    rec.errorCount = errorCount;
+    rec.totalFreight = totalFreight;
+    rec.calculationMode = m_currentCalcMode;
+    rec.selectedCustomer = m_currentCustomer;
+    rec.threadCount = m_currentThreadCount;
+    rec.avgWeightBase = m_currentAvgBase;
+    rec.avgWeightUpperLimit = m_currentAvgLimit;
+    rec.avgWeightIncrement = m_currentAvgStep;
+    rec.avgWeightSurcharge = m_currentAvgSurcharge;
+
+    // 规则名称列表
+    rec.ruleNames = m_ruleManager->ruleNames();
+
+    // 文件名称
+    for (const QString &fp : m_currentFilePaths) {
+        rec.fileNames.append(fp);
+    }
+
+    // 全局规则计数
+    GlobalRules gr = m_ruleManager->globalRules();
+    rec.activityRuleCount = gr.activityRules.size();
+    rec.tempPriceIncreaseCount = gr.tempPriceIncreases.size();
+    rec.provincePriceIncreaseCount = gr.provincePriceIncreases.size();
+
+    // 加载已有历史记录
+    QList<CalculationHistoryRecord> history = loadHistory();
+
+    // 限制最多保留 100 条历史记录
+    const int MAX_HISTORY = 100;
+    while (history.size() >= MAX_HISTORY) {
+        history.removeFirst();
+    }
+    history.append(rec);
+
+    // 保存到文件
+    QJsonArray arr;
+    for (const CalculationHistoryRecord &h : history) {
+        arr.append(h.toJson());
+    }
+
+    QJsonDocument doc(arr);
+    QFile file(historyFilePath());
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        file.write(doc.toJson(QJsonDocument::Indented));
+        file.close();
+    }
+}
+
+QList<CalculationHistoryRecord> MainWindow::loadHistory() const
+{
+    QList<CalculationHistoryRecord> history;
+
+    QFile file(historyFilePath());
+    if (!file.open(QIODevice::ReadOnly)) {
+        return history;
+    }
+
+    QByteArray data = file.readAll();
+    file.close();
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        return history;
+    }
+
+    const QJsonArray arr = doc.array();
+    for (const QJsonValue &val : arr) {
+        if (val.isObject()) {
+            history.append(CalculationHistoryRecord::fromJson(val.toObject()));
+        }
+    }
+
+    return history;
+}
+
+void MainWindow::onHistoryClicked()
+{
+    HistoryDialog dialog(historyFilePath(), this);
+    dialog.exec();
+}
+
+void MainWindow::onChartClicked()
+{
+    if (m_currentOrders.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("提示"),
+                             QStringLiteral("没有可展示的数据，请先导入并计算。"));
+        return;
+    }
+
+    // 过滤掉无效数据行（但保留有运费数据的行）
+    QList<OrderData> validOrders;
+    for (const OrderData &order : m_currentOrders) {
+        // 只过滤掉完全无效且无运费的行
+        if (order.freight > 0 || order.isValid || order.errorMessage.isEmpty()) {
+            validOrders.append(order);
+        }
+    }
+    // 如果过滤后为空，就使用全部数据
+    if (validOrders.isEmpty()) {
+        validOrders = m_currentOrders;
+    }
+
+    ChartDialog dialog(validOrders, m_currentCalcMode, this);
+    dialog.exec();
 }

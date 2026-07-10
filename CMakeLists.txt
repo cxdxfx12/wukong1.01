@@ -37,6 +37,9 @@ set(SOURCES
     src/UI/RuleManagerDialog.cpp
     src/UI/RuleHelpDialog.cpp
     src/UI/BannerWidget.cpp
+    src/UI/HistoryDialog.cpp
+    src/UI/ChartDialog.cpp
+    src/UI/ChartWidgets.cpp
     src/Utils/Logger.cpp
     src/Utils/ProvinceUtils.cpp
     src/Utils/ConfigManager.cpp
@@ -50,6 +53,8 @@ set(HEADERS
     src/DataModel/Customer.h
     src/DataModel/PriceTable.h
     src/DataModel/CalculationRule.h
+    src/DataModel/CalculationHistory.h
+    src/DataModel/CustomerStats.h
     src/Excel/ExcelEngine.h
     src/Excel/ExcelImporter.h
     src/Excel/ExcelExporter.h
@@ -65,6 +70,9 @@ set(HEADERS
     src/UI/RuleManagerDialog.h
     src/UI/RuleHelpDialog.h
     src/UI/BannerWidget.h
+    src/UI/HistoryDialog.h
+    src/UI/ChartDialog.h
+    src/UI/ChartWidgets.h
     src/Utils/Logger.h
     src/Utils/ProvinceUtils.h
     src/Utils/ConfigManager.h

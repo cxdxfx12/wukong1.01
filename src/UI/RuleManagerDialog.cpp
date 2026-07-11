@@ -208,11 +208,29 @@ void RuleManagerDialog::onAddCustomer()
     if (!ok || name.trimmed().isEmpty())
         return;
 
+    // 选择快递公司
+    QStringList couriers = m_ruleManager->courierNames();
+    if (couriers.isEmpty()) {
+        couriers << QStringLiteral("申通") << QStringLiteral("中通") << QStringLiteral("圆通")
+                 << QStringLiteral("韵达") << QStringLiteral("顺丰") << QStringLiteral("京东");
+    }
+    QString currentCourier = m_ruleManager->courierName();
+    int defaultIdx = couriers.indexOf(currentCourier);
+    if (defaultIdx < 0) defaultIdx = 0;
+
+    bool ok2 = false;
+    QString courier = QInputDialog::getItem(this, QStringLiteral("选择快递公司"),
+                                            QStringLiteral("快递公司:"), couriers,
+                                            defaultIdx, false, &ok2);
+    if (!ok2 || courier.isEmpty())
+        return;
+
     CustomerRule newRule;
     newRule.customerName = name.trimmed();
     newRule.calculationMode = QStringLiteral("实际重量");
     newRule.useDefaultPrice = true;
-    newRule.customPriceRules = m_ruleManager->defaultPriceTable();
+    newRule.courier = courier;
+    newRule.customPriceRules = m_ruleManager->priceTableForCourier(courier);
 
     m_rules.append(newRule);
     m_ruleManager->addCustomerRule(newRule);
@@ -290,6 +308,25 @@ void RuleManagerDialog::onBatchImportCustomers()
         return;
     }
 
+    // 选择快递公司
+    QStringList couriers = m_ruleManager->courierNames();
+    if (couriers.isEmpty()) {
+        couriers << QStringLiteral("申通") << QStringLiteral("中通") << QStringLiteral("圆通")
+                 << QStringLiteral("韵达") << QStringLiteral("顺丰") << QStringLiteral("京东");
+    }
+    QString currentCourier = m_ruleManager->courierName();
+    int defaultIdx = couriers.indexOf(currentCourier);
+    if (defaultIdx < 0) defaultIdx = 0;
+
+    bool ok = false;
+    QString courier = QInputDialog::getItem(this, QStringLiteral("选择快递公司"),
+                                            QStringLiteral("批导入客户的快递公司:"), couriers,
+                                            defaultIdx, false, &ok);
+    if (!ok || courier.isEmpty())
+        return;
+
+    QList<PriceRule> courierTable = m_ruleManager->priceTableForCourier(courier);
+
     int importedCount = 0;
     for (int r = 2; r <= maxRow; ++r) {
         QVariant cell = xlsx.read(r, 1);
@@ -305,7 +342,8 @@ void RuleManagerDialog::onBatchImportCustomers()
         newRule.customerName = name;
         newRule.calculationMode = QStringLiteral("实际重量");
         newRule.useDefaultPrice = true;
-        newRule.customPriceRules = m_ruleManager->defaultPriceTable();
+        newRule.courier = courier;
+        newRule.customPriceRules = courierTable;
 
         m_rules.append(newRule);
         m_ruleManager->addCustomerRule(newRule);
@@ -450,12 +488,12 @@ void RuleManagerDialog::onApplyChanges()
 void RuleManagerDialog::onResetDefault()
 {
     int ret = QMessageBox::question(this, QStringLiteral("恢复默认"),
-                                    QStringLiteral("确定要恢复默认报价表吗？所有客户的报价表都将被重置。"),
+                                    QStringLiteral("确定要恢复默认报价表为申通吗？\n（不影响已有客户的报价规则）"),
                                     QMessageBox::Yes | QMessageBox::No);
     if (ret != QMessageBox::Yes)
         return;
 
     m_ruleManager->initDefaultPriceTable();
     loadCustomerList();
-    QMessageBox::information(this, QStringLiteral("重置成功"), QStringLiteral("已恢复默认报价表"));
+    QMessageBox::information(this, QStringLiteral("重置成功"), QStringLiteral("默认报价表已恢复为申通"));
 }

@@ -240,6 +240,10 @@ QString RuleHelpDialog::generateHelpContent()
 - **客服电话**: 17771300068 / 19171045360 / 19171046906
 - **服务时间**: 周一至周五 9:00-18:00
 
+### 📖 了解更多
+
+想了解更多功能介绍和使用教程？请点击 [了解更多](https://www.hbdxm.com/wukong_guide.html)
+
 ---
 
 *最后更新：2026-07-09*

@@ -7,6 +7,7 @@
 #include <QElapsedTimer>
 #include <QApplication>
 #include <QtConcurrent>
+#include <QThread>
 #include <QDir>
 #include <QGridLayout>
 #include <QProgressBar>
@@ -14,7 +15,9 @@
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QRegularExpression>
+#include <QPainter>
 #include <memory>
+#include <functional>
 #include <xlsxdocument.h>
 
 #include "Excel/ExcelEngine.h"
@@ -26,6 +29,7 @@
 #include "UI/RuleHelpDialog.h"
 #include "UI/HistoryDialog.h"
 #include "UI/ChartDialog.h"
+#include "UI/HeaderMappingDialog.h"
 #include "Calculation/SimdCalculator.h"
 #include "Utils/Logger.h"
 
@@ -40,6 +44,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
     , m_calculator(new FreightCalculator(this))
     , m_ruleManager(new RuleManager(this))
+    , m_tplManager(new MappingTemplateManager)
     , m_importWatcher(new QFutureWatcher<void>(this))
     , m_exportWatcher(new QFutureWatcher<void>(this))
     , m_batchWatcher(new QFutureWatcher<void>(this))
@@ -51,12 +56,24 @@ MainWindow::MainWindow(QWidget *parent)
     setupBanner();
     setupConnections();
     setupStatusBar();
+    setupToolbarIcons();
 
     m_ruleManager->initDefaultPriceTable();
     m_ruleManager->loadFromFile(RuleManager::defaultFilePath());
     m_calculator->setDefaultPriceTable(m_ruleManager->defaultPriceTable());
     m_calculator->setGlobalRules(m_ruleManager->globalRules());
     updateCustomerCombo();
+
+    // 同步快递公司选择框
+    {
+        QString current = m_ruleManager->courierName();
+        int idx = ui->courierCombo->findText(current);
+        if (idx >= 0) {
+            ui->courierCombo->blockSignals(true);
+            ui->courierCombo->setCurrentIndex(idx);
+            ui->courierCombo->blockSignals(false);
+        }
+    }
 
     // 从全局规则加载拉均重参数到界面（阻塞信号，避免初始化时触发保存）
     GlobalRules gr = m_ruleManager->globalRules();
@@ -75,6 +92,11 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->mainSplitter->setStretchFactor(0, 3);
     ui->mainSplitter->setStretchFactor(1, 1);
+
+    // 线程数：0 = 自动（使用 CPU 逻辑核心数）
+    ui->threadSpin->setToolTip(QStringLiteral(
+        "选择[自动]将根据 CPU 核心数自动使用最大可用线程\n"
+        "也可手动指定 1-64 的线程数"));
 
     // 初始化：拉均重参数默认隐藏
     onCalcModeChanged(ui->modeCombo->currentText());
@@ -110,12 +132,14 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    delete m_tplManager;
     delete ui;
 }
 
 void MainWindow::setupConnections()
 {
     connect(ui->importBtn, &QPushButton::clicked, this, &MainWindow::onImportClicked);
+    connect(ui->headerMappingBtn, &QPushButton::clicked, this, &MainWindow::onHeaderMappingClicked);
     connect(ui->calculateBtn, &QPushButton::clicked, this, &MainWindow::onCalculateClicked);
     connect(ui->exportBtn, &QPushButton::clicked, this, &MainWindow::onExportClicked);
     connect(ui->quickTestBtn, &QPushButton::clicked, this, &MainWindow::onQuickTestClicked);
@@ -154,6 +178,9 @@ void MainWindow::setupConnections()
     connect(ui->avgLimitSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onAvgParamChanged);
     connect(ui->avgStepSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onAvgParamChanged);
     connect(ui->avgSurchargeSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onAvgParamChanged);
+
+    // 快递公司切换
+    connect(ui->courierCombo, &QComboBox::currentTextChanged, this, &MainWindow::onCourierChanged);
 }
 
 void MainWindow::setupStyle()
@@ -180,6 +207,210 @@ void MainWindow::setupStatusBar()
     statusBar()->addPermanentWidget(companyLabel);
     statusBar()->addPermanentWidget(recordLabel);
     statusBar()->addPermanentWidget(timeLabel);
+}
+
+void MainWindow::setupToolbarIcons()
+{
+    // Helper: 根据绘制函数和颜色生成图标
+    using IconPainter = std::function<void(QPainter&, const QRect&)>;
+    auto makeIcon = [](const IconPainter& painter, int size, int pad, QColor color) -> QIcon {
+        QPixmap pix(size, size);
+        pix.fill(Qt::transparent);
+        QPainter p(&pix);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(QPen(color, 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.setBrush(Qt::NoBrush);
+        QRect r(pad, pad, size - 2 * pad, size - 2 * pad);
+        painter(p, r);
+        p.end();
+        return QIcon(pix);
+    };
+
+    // Helper: 为工具栏按钮设置浅色背景样式，让彩色图标可见
+    auto styleToolbarBtn = [](QPushButton* btn, const QColor& accent) {
+        btn->setStyleSheet(QString(R"(
+            QPushButton {
+                background-color: #ffffff;
+                color: #333333;
+                border: 1px solid #d0d0d0;
+                border-radius: 4px;
+                padding: 4px 14px;
+                font-size: 11px;
+                min-height: 28px;
+            }
+            QPushButton:hover {
+                background-color: %1;
+                border-color: %2;
+            }
+            QPushButton:pressed {
+                background-color: %3;
+                border-color: %2;
+            }
+            QPushButton:disabled {
+                background-color: #f5f5f5;
+                color: #b0b0b0;
+                border-color: #e0e0e0;
+            }
+        )").arg(accent.lighter(170).name(),
+                accent.name(),
+                accent.lighter(150).name()));
+    };
+
+    const int SIZE = 20;
+    const int PAD = 3;
+    const QSize ICON_SIZE(18, 18);
+
+    // ========== 1. 导入Excel — 绿色 ==========
+    QColor importColor("#27ae60");
+    ui->importBtn->setIcon(makeIcon([](QPainter& p, const QRect& r) {
+        int cx = r.center().x();
+        p.drawLine(cx, r.top(), cx, r.bottom() - 4);
+        p.drawLine(cx - 4, r.bottom() - 7, cx, r.bottom() - 3);
+        p.drawLine(cx + 4, r.bottom() - 7, cx, r.bottom() - 3);
+        p.drawLine(r.left() + 1, r.bottom() - 1, r.right() - 1, r.bottom() - 1);
+    }, SIZE, PAD, importColor));
+    ui->importBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->importBtn, importColor);
+
+    // ========== 1.5. 表头映射 — 青色 ==========
+    QColor mappingColor("#00a8a8");
+    ui->headerMappingBtn->setIcon(makeIcon([&](QPainter& p, const QRect& r) {
+        int x1 = r.left() + 2;
+        int x2 = r.center().x();
+        int x3 = r.right() - 2;
+        int y1 = r.top() + 2;
+        int y2 = r.center().y();
+        int y3 = r.bottom() - 2;
+        // 左侧点阵
+        p.setPen(QPen(mappingColor, 1.5));
+        for (int i = 0; i < 3; i++) {
+            int yy = y1 + i * 5;
+            p.drawLine(x1, yy, x2 - 3, yy);
+            p.setPen(QPen(mappingColor, 2.5));
+            p.drawPoint(x1, yy);
+            p.setPen(QPen(mappingColor, 1.5));
+        }
+        // 箭头
+        p.setPen(QPen(mappingColor, 2, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(x2, y2, x3, y2);
+        p.drawLine(x3 - 5, y2 - 4, x3, y2);
+        p.drawLine(x3 - 5, y2 + 4, x3, y2);
+    }, SIZE, PAD, mappingColor));
+    ui->headerMappingBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->headerMappingBtn, mappingColor);
+    // 初始禁用，导入后启用
+    ui->headerMappingBtn->setEnabled(false);
+
+    // ========== 2. 开始计算 — 橙色 ==========
+    QColor calcColor("#e67e22");
+    ui->calculateBtn->setIcon(makeIcon([&](QPainter& p, const QRect& r) {
+        int cx = r.center().x() + 1;
+        int cy = r.center().y();
+        p.setBrush(calcColor);
+        QPolygon tri;
+        tri << QPoint(cx - 4, cy - 6) << QPoint(cx + 5, cy) << QPoint(cx - 4, cy + 6);
+        p.drawPolygon(tri);
+    }, SIZE, PAD, calcColor));
+    ui->calculateBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->calculateBtn, calcColor);
+
+    // ========== 3. 导出结果 — 蓝色 ==========
+    QColor exportColor("#2980b9");
+    ui->exportBtn->setIcon(makeIcon([](QPainter& p, const QRect& r) {
+        int cx = r.center().x();
+        p.drawLine(r.left() + 1, r.bottom() - 1, r.right() - 1, r.bottom() - 1);
+        p.drawLine(cx, r.bottom() - 3, cx, r.top() + 3);
+        p.drawLine(cx - 4, r.top() + 6, cx, r.top() + 2);
+        p.drawLine(cx + 4, r.top() + 6, cx, r.top() + 2);
+    }, SIZE, PAD, exportColor));
+    ui->exportBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->exportBtn, exportColor);
+
+    // ========== 4. 快速测试 — 琥珀色 ==========
+    QColor testColor("#f39c12");
+    ui->quickTestBtn->setIcon(makeIcon([&](QPainter& p, const QRect& r) {
+        int cx = r.center().x();
+        int cy = r.center().y();
+        p.setBrush(testColor);
+        QPolygon bolt;
+        bolt << QPoint(cx, r.top()) << QPoint(cx - 4, cy + 1)
+             << QPoint(cx + 1, cy) << QPoint(cx - 2, r.bottom())
+             << QPoint(cx, cy - 1) << QPoint(cx - 3, cy)
+             << QPoint(cx + 1, r.top());
+        p.drawPolygon(bolt);
+    }, SIZE, PAD, testColor));
+    ui->quickTestBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->quickTestBtn, testColor);
+
+    // ========== 5. 规则管理 — 紫色 ==========
+    QColor ruleColor("#8e44ad");
+    ui->ruleManageBtn->setIcon(makeIcon([&](QPainter& p, const QRect& r) {
+        int y = r.top() + 3;
+        for (int i = 0; i < 3; ++i) {
+            int yy = y + i * 5;
+            p.setPen(QPen(ruleColor, 1.5));
+            p.drawLine(r.left() + 1, yy, r.right() - 1, yy);
+            int knobX = r.left() + 3 + (i % 3) * 4;
+            p.setPen(QPen(ruleColor, 2));
+            p.drawPoint(knobX, yy);
+        }
+    }, SIZE, PAD, ruleColor));
+    ui->ruleManageBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->ruleManageBtn, ruleColor);
+
+    // ========== 6. 全局规则 — 青色 ==========
+    QColor globalColor("#16a085");
+    ui->globalRulesBtn->setIcon(makeIcon([](QPainter& p, const QRect& r) {
+        p.drawEllipse(r.center(), 7, 7);
+        p.drawLine(r.center().x(), r.top() + 2, r.center().x(), r.bottom() - 2);
+        p.drawLine(r.left() + 2, r.center().y(), r.right() - 2, r.center().y());
+    }, SIZE, PAD, globalColor));
+    ui->globalRulesBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->globalRulesBtn, globalColor);
+
+    // ========== 7. 规则说明 — 深蓝灰 ==========
+    QColor helpColor("#2c3e50");
+    ui->ruleHelpBtn->setIcon(makeIcon([&](QPainter& p, const QRect& r) {
+        int cx = r.center().x();
+        int cy = r.center().y();
+        QRect arcRect(cx - 4, r.top(), 8, 8);
+        p.drawArc(arcRect, 0 * 16, 180 * 16);
+        p.drawLine(cx, cy - 1, cx, cy + 2);
+        p.setBrush(helpColor);
+        p.drawEllipse(QPoint(cx, r.bottom()), 1, 1);
+    }, SIZE, PAD, helpColor));
+    ui->ruleHelpBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->ruleHelpBtn, helpColor);
+
+    // ========== 8. 历史记录 — 深橙 ==========
+    QColor historyColor("#d35400");
+    ui->historyBtn->setIcon(makeIcon([](QPainter& p, const QRect& r) {
+        int cx = r.center().x();
+        int cy = r.center().y();
+        p.drawEllipse(r.center(), 7, 7);
+        p.drawLine(cx, cy, cx, cy - 4);
+        p.drawLine(cx, cy, cx + 4, cy);
+    }, SIZE, PAD, historyColor));
+    ui->historyBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->historyBtn, historyColor);
+
+    // ========== 9. 生成图表 — 红色 ==========
+    QColor chartColor("#e74c3c");
+    ui->chartBtn->setIcon(makeIcon([&](QPainter& p, const QRect& r) {
+        int barW = 4;
+        int gap = 1;
+        int baseY = r.bottom();
+        int heights[] = {6, 10, 7};
+        for (int i = 0; i < 3; ++i) {
+            int bx = r.left() + 1 + i * (barW + gap);
+            QRect bar(bx, baseY - heights[i], barW, heights[i]);
+            p.setBrush(chartColor);
+            p.setPen(Qt::NoPen);
+            p.drawRect(bar);
+        }
+    }, SIZE, PAD, chartColor));
+    ui->chartBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->chartBtn, chartColor);
 }
 
 void MainWindow::showCenterProgress(const QString &text)
@@ -238,7 +469,7 @@ void MainWindow::applyLightStyle()
             color: white;
             border: none;
             border-radius: 4px;
-            padding: 4px 12px;
+            padding: 4px 14px;
             font-size: 11px;
             min-height: 28px;
         }
@@ -458,7 +689,7 @@ void MainWindow::onImportClicked()
     QStringList filePaths = QFileDialog::getOpenFileNames(
         this,
         QStringLiteral("选择Excel文件（最多5个）"),
-        QString(),
+        QStandardPaths::writableLocation(QStandardPaths::DesktopLocation),
         QStringLiteral("Excel文件 (*.xlsx *.xls)"),
         nullptr,
         QFileDialog::DontUseNativeDialog
@@ -493,10 +724,20 @@ void MainWindow::onImportClicked()
     importFilesAsync(filePaths);
 }
 
-void MainWindow::importFilesAsync(const QStringList &filePaths)
+void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExistingMapping)
 {
     m_totalFileCount = filePaths.size();
     m_processedFileCount = 0;
+
+    // ★ 预检测第一个文件的表头和列映射
+    // useExistingMapping=true → 使用已有的 m_lastColumnMapping（表头映射对话框设置的值）
+    // useExistingMapping=false → 自动检测（首次导入）
+    if (!useExistingMapping) {
+        m_lastImportedFilePath = filePaths.first();
+        ExcelImporter detector;
+        m_lastImportedHeaders = detector.getAvailableHeaders(m_lastImportedFilePath);
+        m_lastColumnMapping = detector.autoDetectColumns(m_lastImportedHeaders);
+    }
 
     QPointer<MainWindow> self = this;
 
@@ -505,9 +746,13 @@ void MainWindow::importFilesAsync(const QStringList &filePaths)
     auto sharedProcessedRows = std::make_shared<QAtomicInt>(0);
     auto sharedTotalRows = std::make_shared<QAtomicInt>(0);
 
+    // 捕获当前列映射，供所有文件使用
+    QMap<QString, int> columnMapping = m_lastColumnMapping;
+
     emit importProgress(0);
 
-    auto processFunc = [self, filePaths, sharedOrders, sharedMutex, sharedProcessedRows, sharedTotalRows]() {
+    auto processFunc = [self, filePaths, sharedOrders, sharedMutex, sharedProcessedRows,
+                        sharedTotalRows, columnMapping]() {
         try {
             int fileCount = filePaths.size();
 
@@ -551,7 +796,7 @@ void MainWindow::importFilesAsync(const QStringList &filePaths)
                                 }
                             }, Qt::QueuedConnection);
 
-                        QList<OrderData> orders = importer.importFromFile(filePaths[i]);
+                        QList<OrderData> orders = importer.importFromFile(filePaths[i], columnMapping);
 
                         QMutexLocker locker(sharedMutex.get());
                         sharedOrders->append(orders);
@@ -611,6 +856,7 @@ void MainWindow::onImportFinished()
 {
     hideCenterProgress();
     ui->importBtn->setEnabled(true);
+    ui->headerMappingBtn->setEnabled(true);
     ui->calculateBtn->setEnabled(true);
     ui->exportBtn->setEnabled(true);
 
@@ -661,7 +907,10 @@ void MainWindow::onCalculateClicked()
     // 保存当前计算上下文，用于历史记录
     m_currentCalcMode = ui->modeCombo->currentText();
     m_currentCustomer = ui->customerCombo->currentText();
-    m_currentThreadCount = ui->threadSpin->value();
+    int rawThreadCount = ui->threadSpin->value();
+    // 0 = 自动，使用 CPU 逻辑核心数
+    int effectiveThreadCount = (rawThreadCount == 0) ? QThread::idealThreadCount() : rawThreadCount;
+    m_currentThreadCount = effectiveThreadCount;
     m_currentAvgBase = ui->avgBaseSpin->value();
     m_currentAvgLimit = ui->avgLimitSpin->value();
     m_currentAvgStep = ui->avgStepSpin->value();
@@ -669,7 +918,7 @@ void MainWindow::onCalculateClicked()
 
     QPointer<MainWindow> self = this;
     QString mode = ui->modeCombo->currentText();
-    int threadCount = ui->threadSpin->value();
+    int threadCount = effectiveThreadCount;
     QString selectedCustomer = ui->customerCombo->currentText();
     QMap<QString, CustomerRule> ruleMap;
     QStringList ruleNames = m_ruleManager->ruleNames();
@@ -1256,6 +1505,55 @@ void MainWindow::setupBanner()
 // ����������˵���Ի���
 // ============================================================================
 
+// ============================================================================
+// BiaoTouYingShe
+// ============================================================================
+
+void MainWindow::onHeaderMappingClicked()
+{
+    if (m_currentFilePaths.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("\u63d0\u793a"),
+                             QStringLiteral("\u8bf7\u5148\u5bfc\u5165 Excel \u6587\u4ef6\u3002"));
+        return;
+    }
+
+    if (m_lastImportedHeaders.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("\u63d0\u793a"),
+                             QStringLiteral("\u65e0\u6cd5\u8bfb\u53d6\u5bfc\u5165\u6587\u4ef6\u7684\u8868\u5934\u4fe1\u606f\u3002"));
+        return;
+    }
+
+    HeaderMappingDialog dialog(m_lastImportedHeaders, m_lastColumnMapping,
+                               m_lastImportedFilePath, m_tplManager, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QMap<QString, int> newMapping = dialog.mapping();
+
+    if (newMapping == m_lastColumnMapping) {
+        return;
+    }
+
+    m_lastColumnMapping = newMapping;
+    m_currentOrders.clear();
+    m_currentPage = 1;
+
+    auto *statusLabel = statusBar()->findChild<QLabel*>(QStringLiteral("statusLabel"));
+    if (statusLabel)
+        statusLabel->setText(QStringLiteral("\u6b63\u5728\u4f7f\u7528\u65b0\u6620\u5c04\u91cd\u65b0\u5bfc\u5165..."));
+
+    ui->progressBar->setValue(0);
+    ui->importBtn->setEnabled(false);
+    ui->headerMappingBtn->setEnabled(false);
+    ui->calculateBtn->setEnabled(false);
+    ui->exportBtn->setEnabled(false);
+
+    showCenterProgress(QStringLiteral("\u6b63\u5728\u91cd\u65b0\u5bfc\u5165..."));
+
+    importFilesAsync(m_currentFilePaths, true);
+}
+
 void MainWindow::onRuleHelpClicked()
 {
     RuleHelpDialog *dialog = new RuleHelpDialog(this);
@@ -1394,4 +1692,14 @@ void MainWindow::onChartClicked()
 
     ChartDialog dialog(validOrders, m_currentCalcMode, this);
     dialog.exec();
+}
+
+void MainWindow::onCourierChanged(const QString &courier)
+{
+    if (courier.isEmpty())
+        return;
+
+    m_ruleManager->setCourier(courier);
+    m_calculator->setDefaultPriceTable(m_ruleManager->defaultPriceTable());
+    m_ruleManager->saveToFile(RuleManager::defaultFilePath());
 }

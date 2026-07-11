@@ -1,4 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
+
+# 强制指定64位windres（系统C:\Windows\MinGW自带的是32位版本，不兼容）
+if(WIN32)
+    # 优先使用Qt自带的mingw工具链中的windres
+    if(EXISTS "E:/Qt/Tools/mingw1310_64/bin/windres.exe")
+        set(CMAKE_RC_COMPILER "E:/Qt/Tools/mingw1310_64/bin/windres.exe" CACHE FILEPATH "RC compiler")
+    endif()
+endif()
+
 project(WukongFreight VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -22,6 +31,7 @@ set(SOURCES
     src/DataModel/Customer.cpp
     src/DataModel/PriceTable.cpp
     src/DataModel/CalculationRule.cpp
+    src/DataModel/MappingTemplate.cpp
     src/Excel/ExcelEngine.cpp
     src/Excel/ExcelImporter.cpp
     src/Excel/ExcelExporter.cpp
@@ -37,6 +47,7 @@ set(SOURCES
     src/UI/RuleManagerDialog.cpp
     src/UI/RuleHelpDialog.cpp
     src/UI/BannerWidget.cpp
+    src/UI/HeaderMappingDialog.cpp
     src/UI/HistoryDialog.cpp
     src/UI/ChartDialog.cpp
     src/UI/ChartWidgets.cpp
@@ -53,6 +64,7 @@ set(HEADERS
     src/DataModel/Customer.h
     src/DataModel/PriceTable.h
     src/DataModel/CalculationRule.h
+    src/DataModel/MappingTemplate.h
     src/DataModel/CalculationHistory.h
     src/DataModel/CustomerStats.h
     src/Excel/ExcelEngine.h
@@ -70,6 +82,7 @@ set(HEADERS
     src/UI/RuleManagerDialog.h
     src/UI/RuleHelpDialog.h
     src/UI/BannerWidget.h
+    src/UI/HeaderMappingDialog.h
     src/UI/HistoryDialog.h
     src/UI/ChartDialog.h
     src/UI/ChartWidgets.h
@@ -95,7 +108,6 @@ set(RESOURCES
 # Windows 图标资源
 if(WIN32)
     set(WIN_RC resources/app.rc)
-    # 设置 RC 文件的包含路径，确保 windres 能找到 app_icon.ico
     set_source_files_properties(resources/app.rc PROPERTIES
         COMPILE_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/resources"
     )

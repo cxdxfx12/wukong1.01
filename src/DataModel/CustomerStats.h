@@ -35,7 +35,7 @@ struct CustomerStats {
     }
 };
 
-// 从订单列表计算客户统计数据
+// 从订单列表计算客户统计数据（按结算对象/客户分组）
 inline QList<CustomerStats> computeCustomerStats(const QList<OrderData> &orders)
 {
     QMap<QString, CustomerStats> statsMap;
@@ -47,6 +47,30 @@ inline QList<CustomerStats> computeCustomerStats(const QList<OrderData> &orders)
 
         CustomerStats &s = statsMap[client];
         s.customerName = client;
+        s.shipmentCount++;
+        s.totalFreight += order.freight;
+        double billableWeight = std::max(order.actualWeight, order.volumetricWeight);
+        s.totalWeight += billableWeight;
+        s.totalActualWeight += order.actualWeight;
+        s.totalVolumetricWeight += order.volumetricWeight;
+    }
+
+    QList<CustomerStats> result = statsMap.values();
+    return result;
+}
+
+// 从订单列表计算店铺统计数据（按订单客户/店铺分组）
+inline QList<CustomerStats> computeStoreStats(const QList<OrderData> &orders)
+{
+    QMap<QString, CustomerStats> statsMap;
+
+    for (const OrderData &order : orders) {
+        QString store = order.customer;  // 订单客户 = 店铺
+        if (store.isEmpty())
+            store = QStringLiteral("未知店铺");
+
+        CustomerStats &s = statsMap[store];
+        s.customerName = store;
         s.shipmentCount++;
         s.totalFreight += order.freight;
         double billableWeight = std::max(order.actualWeight, order.volumetricWeight);

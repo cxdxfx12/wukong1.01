@@ -50,6 +50,7 @@ private:
     QLineEdit *m_nameEdit;
     QComboBox *m_mappingCombo;
     QComboBox *m_calcModeCombo;
+    QComboBox *m_courierCombo;   // 快递公司选择
     QCheckBox *m_useDefaultCheck;
     QTableWidget *m_customPriceTable;
     QPushButton *m_saveBtn;

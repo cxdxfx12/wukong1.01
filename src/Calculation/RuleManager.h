@@ -25,6 +25,12 @@ public:
     void setDefaultPriceTable(const QList<PriceRule> &rules);
     QList<PriceRule> defaultPriceTable() const;
 
+    // 快递公司管理
+    QString courierName() const;
+    QStringList courierNames() const;
+    void setCourier(const QString &name);
+    QList<PriceRule> priceTableForCourier(const QString &courierName) const;
+
     // 全局规则
     GlobalRules globalRules() const;
     void setGlobalRules(const GlobalRules &rules);
@@ -53,6 +59,7 @@ public:
 
     // 初始化默认报价表数据
     void initDefaultPriceTable();
+    void initAllPriceTables();
 
     // 持久化
     bool saveToFile(const QString &filePath);
@@ -69,6 +76,10 @@ private:
     QList<PriceRule> m_defaultPriceTable;
     GlobalRules m_globalRules;
     QList<RegionMapping> m_regionMappings;
+
+    // 多套快递报价表
+    QMap<QString, QList<PriceRule>> m_allPriceTables;
+    QString m_currentCourier;
 
     void initRegionMappings();
 };

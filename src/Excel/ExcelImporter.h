@@ -21,13 +21,15 @@ public:
 
     QStringList getAvailableHeaders(const QString &filePath);
 
+    // 公开：根据表头关键词自动检测列映射
+    QMap<QString, int> autoDetectColumns(const QStringList &headers);
+
 signals:
     void progressUpdated(int percent);
     void errorOccurred(const QString &error);
 
 private:
     ExcelEngine *m_engine;
-    QMap<QString, int> autoDetectColumns(const QStringList &headers);
 };
 
 #endif // EXCELIMPORTER_H

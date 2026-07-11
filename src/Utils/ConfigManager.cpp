@@ -8,7 +8,7 @@ ConfigManager::ConfigManager(QObject *parent)
 
 int ConfigManager::defaultThreadCount() const
 {
-    return m_settings.value("defaultThreadCount", 8).toInt();
+    return m_settings.value("defaultThreadCount", 0).toInt();
 }
 
 void ConfigManager::setDefaultThreadCount(int count)

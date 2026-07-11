@@ -23,20 +23,21 @@ private slots:
 
 private:
     QTabWidget *m_tabWidget;
-    QList<CustomerStats> m_stats;
+    QList<CustomerStats> m_stats;      // 按结算客户分组
+    QList<CustomerStats> m_storeStats; // 按店铺(订单客户)分组
     QString m_calcMode;
 
     // 概览卡片
     StatCardWidget *m_cardTotal;
     StatCardWidget *m_cardFreight;
     StatCardWidget *m_cardAvgWeight;
-    StatCardWidget *m_cardCustomers;
+    StatCardWidget *m_cardStores;
 
     void setupUi();
     QWidget* createOverviewTab();
     QWidget* createCountTab();
     QWidget* createFreightTab();
-    QWidget* createAverageTab();
+    QWidget* createStoreTab();  // 原 averageTab → 店铺数据
 
     void exportWidgetToImage(QWidget *widget, const QString &filePath);
 };

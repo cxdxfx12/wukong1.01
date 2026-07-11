@@ -19,11 +19,13 @@ ChartDialog::ChartDialog(const QList<OrderData> &orders,
     : QDialog(parent)
     , m_calcMode(calcMode)
 {
-    // 计算统计数据
+    // 计算两种维度统计数据
     m_stats = computeCustomerStats(orders);
+    m_storeStats = computeStoreStats(orders);
 
     // 按运费降序排序
     std::sort(m_stats.begin(), m_stats.end(), CustomerStats::sortByFreight);
+    std::sort(m_storeStats.begin(), m_storeStats.end(), CustomerStats::sortByFreight);
 
     setupUi();
 }
@@ -72,14 +74,14 @@ void ChartDialog::setupUi()
     m_cardAvgWeight = new StatCardWidget(
         QStringLiteral("平均计费重量"), QStringLiteral("%1kg").arg(avgWeightAll, 0, 'f', 2),
         QColor("#e8a838"), this);
-    m_cardCustomers = new StatCardWidget(
-        QStringLiteral("客户数"), QString::number(m_stats.size()),
-        QColor("#8e44ad"), this);
+    m_cardStores = new StatCardWidget(
+        QStringLiteral("店铺数"), QString::number(m_storeStats.size()),
+        QColor("#e74c3c"), this);
 
     cardsLayout->addWidget(m_cardTotal);
     cardsLayout->addWidget(m_cardFreight);
     cardsLayout->addWidget(m_cardAvgWeight);
-    cardsLayout->addWidget(m_cardCustomers);
+    cardsLayout->addWidget(m_cardStores);
     mainLayout->addLayout(cardsLayout);
 
     // 标签页
@@ -98,7 +100,7 @@ void ChartDialog::setupUi()
     m_tabWidget->addTab(createOverviewTab(), QStringLiteral("📊 综合概览"));
     m_tabWidget->addTab(createCountTab(), QStringLiteral("📦 件数分布"));
     m_tabWidget->addTab(createFreightTab(), QStringLiteral("💰 运费统计"));
-    m_tabWidget->addTab(createAverageTab(), QStringLiteral("📈 平均数据"));
+    m_tabWidget->addTab(createStoreTab(), QStringLiteral("🏪 店铺数据"));
     mainLayout->addWidget(m_tabWidget, 1);
 
     // 底部按钮
@@ -132,7 +134,7 @@ void ChartDialog::setupUi()
 }
 
 // ============================================================================
-// 综合概览 Tab — 概览卡片 + Top 10 客户条形图
+// 综合概览 Tab — Top 10 结算客户运费排名
 // ============================================================================
 QWidget* ChartDialog::createOverviewTab()
 {
@@ -141,7 +143,6 @@ QWidget* ChartDialog::createOverviewTab()
     layout->setSpacing(10);
     layout->setContentsMargins(12, 12, 12, 12);
 
-    // 取前10个客户做展示
     int topN = qMin(10, m_stats.size());
     QStringList categories;
     QList<double> freightValues;
@@ -151,13 +152,12 @@ QWidget* ChartDialog::createOverviewTab()
     }
 
     auto *barChart = new BarChartWidget(page);
-    barChart->setTitle(QStringLiteral("Top %1 客户运费排名").arg(topN));
+    barChart->setTitle(QStringLiteral("Top %1 结算客户运费排名").arg(topN));
     barChart->setData(categories, freightValues, QStringLiteral(" 元"),
                       BarChartWidget::Horizontal, BarChartWidget::ShowValue);
     barChart->setMinimumHeight(qMax(250, topN * 36 + 40));
     layout->addWidget(barChart);
 
-    // 底部提示
     int totalC = 0;
     double totalF = 0.0;
     for (const CustomerStats &s : m_stats) {
@@ -165,7 +165,7 @@ QWidget* ChartDialog::createOverviewTab()
         totalF += s.totalFreight;
     }
     auto *hint = new QLabel(
-        QStringLiteral("共 %1 个客户 | 总件数 %2 | 总运费 ¥%3")
+        QStringLiteral("共 %1 个结算客户 | 总件数 %2 | 总运费 ¥%3")
             .arg(m_stats.size())
             .arg(totalC)
             .arg(totalF, 0, 'f', 2),
@@ -178,7 +178,7 @@ QWidget* ChartDialog::createOverviewTab()
 }
 
 // ============================================================================
-// 件数分布 Tab — 环形图 + 条形图
+// 件数分布 Tab — 环形图 + 条形图（按结算客户）
 // ============================================================================
 QWidget* ChartDialog::createCountTab()
 {
@@ -187,7 +187,6 @@ QWidget* ChartDialog::createCountTab()
     layout->setSpacing(10);
     layout->setContentsMargins(12, 12, 12, 12);
 
-    // 环形图数据（取前 10 个 + "其他"）
     QList<QPair<QString, double>> pieData;
     int totalCount = 0;
     for (const CustomerStats &s : m_stats)
@@ -209,7 +208,6 @@ QWidget* ChartDialog::createCountTab()
     donut->setMinimumWidth(420);
     layout->addWidget(donut);
 
-    // 右侧条形图
     auto *rightPanel = new QWidget(page);
     auto *rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(0, 0, 0, 0);
@@ -224,7 +222,7 @@ QWidget* ChartDialog::createCountTab()
     }
 
     auto *barChart = new BarChartWidget(rightPanel);
-    barChart->setTitle(QStringLiteral("客户件数排名"));
+    barChart->setTitle(QStringLiteral("结算客户件数排名"));
     barChart->setData(categories, countValues, QStringLiteral(" 件"),
                       BarChartWidget::Horizontal, BarChartWidget::ShowValue);
     barChart->setMinimumHeight(qMax(220, showN * 36 + 40));
@@ -236,7 +234,7 @@ QWidget* ChartDialog::createCountTab()
 }
 
 // ============================================================================
-// 运费统计 Tab — 环形图 + 柱形图
+// 运费统计 Tab — 环形图 + 柱形图（按结算客户）
 // ============================================================================
 QWidget* ChartDialog::createFreightTab()
 {
@@ -245,7 +243,6 @@ QWidget* ChartDialog::createFreightTab()
     layout->setSpacing(10);
     layout->setContentsMargins(12, 12, 12, 12);
 
-    // 环形图
     double totalFreight = 0.0;
     for (const CustomerStats &s : m_stats)
         totalFreight += s.totalFreight;
@@ -267,7 +264,6 @@ QWidget* ChartDialog::createFreightTab()
     donut->setMinimumWidth(420);
     layout->addWidget(donut);
 
-    // 右侧柱形图
     auto *rightPanel = new QWidget(page);
     auto *rightLayout = new QVBoxLayout(rightPanel);
     rightLayout->setContentsMargins(0, 0, 0, 0);
@@ -282,13 +278,12 @@ QWidget* ChartDialog::createFreightTab()
     }
 
     auto *barChart = new BarChartWidget(rightPanel);
-    barChart->setTitle(QStringLiteral("客户运费排名"));
+    barChart->setTitle(QStringLiteral("结算客户运费排名"));
     barChart->setData(categories, freightValues, QStringLiteral(" 元"),
                       BarChartWidget::Horizontal, BarChartWidget::ShowValue);
     barChart->setMinimumHeight(qMax(220, showN * 36 + 40));
     rightLayout->addWidget(barChart);
 
-    // 平均运费
     double avgFreight = 0.0;
     int totalCount = 0;
     for (const CustomerStats &s : m_stats) {
@@ -309,9 +304,9 @@ QWidget* ChartDialog::createFreightTab()
 }
 
 // ============================================================================
-// 平均数据 Tab — 平均重量 + 平均运费柱形图
+// 🏪 店铺数据 Tab — 按订单客户(店铺)分组，展示各店铺关键指标
 // ============================================================================
-QWidget* ChartDialog::createAverageTab()
+QWidget* ChartDialog::createStoreTab()
 {
     auto *page = new QWidget(this);
     auto *scrollArea = new QScrollArea(page);
@@ -320,64 +315,143 @@ QWidget* ChartDialog::createAverageTab()
 
     auto *inner = new QWidget();
     auto *layout = new QVBoxLayout(inner);
-    layout->setSpacing(16);
+    layout->setSpacing(14);
     layout->setContentsMargins(12, 12, 12, 12);
 
-    int showN = qMin(15, m_stats.size());
+    if (m_storeStats.isEmpty()) {
+        auto *emptyLabel = new QLabel(QStringLiteral("暂无店铺数据"), inner);
+        emptyLabel->setAlignment(Qt::AlignCenter);
+        emptyLabel->setStyleSheet(QStringLiteral("color: #999; font-size: 14px; padding: 40px;"));
+        layout->addWidget(emptyLabel);
+        scrollArea->setWidget(inner);
 
-    // 平均重量柱形图
+        auto *pageLayout = new QVBoxLayout(page);
+        pageLayout->setContentsMargins(0, 0, 0, 0);
+        pageLayout->addWidget(scrollArea);
+        return page;
+    }
+
+    int showN = qMin(15, m_storeStats.size());
+
+    // --- 店铺概览卡片行 ---
+    // 计算所有店铺汇总
+    int totalShipments = 0;
+    double totalFreightAll = 0.0;
+    double totalWeightAll = 0.0;
+    for (const CustomerStats &s : m_storeStats) {
+        totalShipments += s.shipmentCount;
+        totalFreightAll += s.totalFreight;
+        totalWeightAll += s.totalWeight;
+    }
+    double overallAvgWeight = totalShipments > 0 ? totalWeightAll / totalShipments : 0.0;
+    double overallAvgFreight = totalShipments > 0 ? totalFreightAll / totalShipments : 0.0;
+
+    auto *storeCardsLayout = new QHBoxLayout();
+    storeCardsLayout->setSpacing(10);
+
+    auto *cardStoreCount = new StatCardWidget(
+        QStringLiteral("店铺总数"), QString::number(m_storeStats.size()),
+        QColor("#e74c3c"), inner);
+    auto *cardStoreShipments = new StatCardWidget(
+        QStringLiteral("店铺总件数"), QString::number(totalShipments),
+        QColor("#4a90d9"), inner);
+    auto *cardStoreAvgW = new StatCardWidget(
+        QStringLiteral("店铺均重"), QStringLiteral("%1kg").arg(overallAvgWeight, 0, 'f', 2),
+        QColor("#e8a838"), inner);
+    auto *cardStoreAvgF = new StatCardWidget(
+        QStringLiteral("店铺均费"), QStringLiteral("¥%1").arg(overallAvgFreight, 0, 'f', 2),
+        QColor("#27ae60"), inner);
+
+    storeCardsLayout->addWidget(cardStoreCount);
+    storeCardsLayout->addWidget(cardStoreShipments);
+    storeCardsLayout->addWidget(cardStoreAvgW);
+    storeCardsLayout->addWidget(cardStoreAvgF);
+    layout->addLayout(storeCardsLayout);
+
+    // --- 第一行图表：件数占比(环形) + 件数排名(条形) ---
     {
-        QStringList categories;
-        QList<double> avgWeights;
+        auto *row = new QHBoxLayout();
+        row->setSpacing(10);
+
+        // 环形图：各店铺件数分布
+        QList<QPair<QString, double>> pieData;
+        int pieTopN = qMin(7, m_storeStats.size());
+        int shownShipments = 0;
+        for (int i = 0; i < pieTopN; ++i) {
+            pieData.append({m_storeStats[i].customerName, (double)m_storeStats[i].shipmentCount});
+            shownShipments += m_storeStats[i].shipmentCount;
+        }
+        int otherShipments = totalShipments - shownShipments;
+        if (otherShipments > 0 && m_storeStats.size() > pieTopN)
+            pieData.append({QStringLiteral("其他"), (double)otherShipments});
+
+        auto *donut = new DonutChartWidget(inner);
+        donut->setData(pieData, QStringLiteral("%1家店铺\n%2件").arg(m_storeStats.size()).arg(totalShipments));
+        donut->setMinimumWidth(360);
+        row->addWidget(donut);
+
+        // 条形图：件数排名
+        auto *rightPanel = new QWidget(inner);
+        auto *rightLayout = new QVBoxLayout(rightPanel);
+        rightLayout->setContentsMargins(0, 0, 0, 0);
+        rightLayout->setSpacing(4);
+
+        QStringList cats;
+        QList<double> vals;
+        int barN = qMin(10, m_storeStats.size());
+        for (int i = 0; i < barN; ++i) {
+            cats << m_storeStats[i].customerName;
+            vals << (double)m_storeStats[i].shipmentCount;
+        }
+
+        auto *bar = new BarChartWidget(rightPanel);
+        bar->setTitle(QStringLiteral("店铺件数排名"));
+        bar->setData(cats, vals, QStringLiteral(" 件"),
+                     BarChartWidget::Horizontal, BarChartWidget::ShowValue);
+        bar->setMinimumHeight(qMax(200, barN * 34 + 40));
+        rightLayout->addWidget(bar);
+
+        row->addWidget(rightPanel);
+        layout->addLayout(row);
+    }
+
+    // --- 第二行图表：平均计费重量 (柱形图) ---
+    {
+        QStringList cats;
+        QList<double> vals;
         for (int i = 0; i < showN; ++i) {
-            categories << m_stats[i].customerName;
-            avgWeights << m_stats[i].avgWeight();
+            cats << m_storeStats[i].customerName;
+            vals << m_storeStats[i].avgWeight();
         }
 
         auto *chart = new BarChartWidget(inner);
-        chart->setTitle(QStringLiteral("客户平均计费重量 (kg)"));
-        chart->setData(categories, avgWeights, QStringLiteral(" kg"),
+        chart->setTitle(QStringLiteral("各店铺平均计费重量 (kg)"));
+        chart->setData(cats, vals, QStringLiteral(" kg"),
                        BarChartWidget::Vertical, BarChartWidget::ShowValue);
-        chart->setMinimumHeight(280);
+        chart->setMinimumHeight(260);
         layout->addWidget(chart);
     }
 
-    // 平均运费柱形图
+    // --- 第三行图表：平均运费 (柱形图) ---
     {
-        QStringList categories;
-        QList<double> avgFreights;
+        QStringList cats;
+        QList<double> vals;
         for (int i = 0; i < showN; ++i) {
-            categories << m_stats[i].customerName;
-            avgFreights << m_stats[i].avgFreight();
+            cats << m_storeStats[i].customerName;
+            vals << m_storeStats[i].avgFreight();
         }
 
         auto *chart = new BarChartWidget(inner);
-        chart->setTitle(QStringLiteral("客户平均单件运费 (元)"));
-        chart->setData(categories, avgFreights, QStringLiteral(" 元"),
+        chart->setTitle(QStringLiteral("各店铺平均单件运费 (元)"));
+        chart->setData(cats, vals, QStringLiteral(" 元"),
                        BarChartWidget::Vertical, BarChartWidget::ShowValue);
-        chart->setMinimumHeight(280);
-        layout->addWidget(chart);
-    }
-
-    // 平均实际重量 vs 平均体积重
-    {
-        QStringList categories;
-        QList<double> avgActWeights, avgVolWeights;
-        for (int i = 0; i < showN; ++i) {
-            categories << m_stats[i].customerName;
-            avgActWeights << m_stats[i].avgActualWeight();
-            avgVolWeights << (m_stats[i].totalVolumetricWeight / qMax(m_stats[i].shipmentCount, 1));
-        }
-
-        auto *chart = new BarChartWidget(inner);
-        chart->setTitle(QStringLiteral("客户平均实际重量 (kg)"));
-        chart->setData(categories, avgActWeights, QStringLiteral(" kg"),
-                       BarChartWidget::Vertical, BarChartWidget::ShowValue);
-        chart->setMinimumHeight(280);
+        chart->setMinimumHeight(260);
         layout->addWidget(chart);
     }
 
     layout->addStretch();
+
+    scrollArea->setWidget(inner);
 
     auto *pageLayout = new QVBoxLayout(page);
     pageLayout->setContentsMargins(0, 0, 0, 0);
@@ -401,7 +475,6 @@ void ChartDialog::onExportImage()
     if (filePath.isEmpty())
         return;
 
-    // 渲染整个对话框为图片
     QPixmap pixmap(size());
     pixmap.setDevicePixelRatio(devicePixelRatioF());
     render(&pixmap);

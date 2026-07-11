@@ -84,6 +84,7 @@ struct CustomerRule {
     QString calculationMode;        // 计算模式: "实际重量"|"体积重"|"拉均重"
     bool useDefaultPrice = true;    // 是否使用默认报价
     QList<PriceRule> customPriceRules;  // 自定义报价规则
+    QString courier;                // 关联的快递公司（申通/中通/圆通/韵达/顺丰/京东）
 };
 
 // 区域-省份映射（默认报价表用）

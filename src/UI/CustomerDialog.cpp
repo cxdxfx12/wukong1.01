@@ -85,6 +85,12 @@ void CustomerDialog::setupUI()
     m_calcModeCombo->setMinimumHeight(36);
     basicForm->addRow(QStringLiteral("计算模式:"), m_calcModeCombo);
 
+    m_courierCombo = new QComboBox(basicGroup);
+    m_courierCombo->setMinimumHeight(36);
+    m_courierCombo->addItems({QStringLiteral("申通"), QStringLiteral("中通"), QStringLiteral("圆通"),
+                              QStringLiteral("韵达"), QStringLiteral("顺丰"), QStringLiteral("京东")});
+    basicForm->addRow(QStringLiteral("快递公司:"), m_courierCombo);
+
     m_useDefaultCheck = new QCheckBox(QStringLiteral("使用默认报价表"), basicGroup);
     basicForm->addRow(m_useDefaultCheck);
 
@@ -350,6 +356,11 @@ void CustomerDialog::loadCustomerRule(const QString &name)
     m_nameEdit->setText(rule.customerName);
     m_mappingCombo->setCurrentText(rule.mappingHeader);
     m_calcModeCombo->setCurrentText(rule.calculationMode);
+    if (!rule.courier.isEmpty()) {
+        m_courierCombo->setCurrentText(rule.courier);
+    } else {
+        m_courierCombo->setCurrentText(QStringLiteral("申通"));
+    }
     m_useDefaultCheck->setChecked(rule.useDefaultPrice);
 
     // 自定义报价规则
@@ -392,6 +403,7 @@ CustomerRule CustomerDialog::buildCustomerRule() const
     rule.customerName = m_nameEdit->text().trimmed();
     rule.mappingHeader = m_mappingCombo->currentText();
     rule.calculationMode = m_calcModeCombo->currentText();
+    rule.courier = m_courierCombo->currentText();
     rule.useDefaultPrice = m_useDefaultCheck->isChecked();
 
     // 自定义报价规则

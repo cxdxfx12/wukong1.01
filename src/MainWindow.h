@@ -15,6 +15,7 @@
 #include "Calculation/RuleManager.h"
 #include "UI/BannerWidget.h"
 #include "DataModel/CalculationHistory.h"
+#include "DataModel/MappingTemplate.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -46,11 +47,13 @@ private slots:
     void onAllFilesProcessed();
     void onCalcModeChanged(const QString &mode);
     void onAvgParamChanged();
+    void onCourierChanged(const QString &courier);
 
     void onFirstPage();
     void onPrevPage();
     void onNextPage();
     void onLastPage();
+    void onHeaderMappingClicked(); // 新增：表头映射
     void onRuleHelpClicked();  // 新增：规则说明
     void onHistoryClicked();   // 新增：历史记录
     void onChartClicked();     // 新增：生成图表
@@ -61,6 +64,7 @@ private:
     QList<QString> m_currentFilePaths;
     FreightCalculator *m_calculator;
     RuleManager *m_ruleManager;
+    MappingTemplateManager *m_tplManager;
     QFutureWatcher<void> *m_importWatcher;
     QFutureWatcher<void> *m_exportWatcher;
     QFutureWatcher<void> *m_batchWatcher;
@@ -81,6 +85,11 @@ private:
 
     bool m_isCalculating = false;
 
+    // 表头映射上下文（用于重新导入）
+    QStringList m_lastImportedHeaders;
+    QMap<QString, int> m_lastColumnMapping;
+    QString m_lastImportedFilePath;
+
     // 当前计算上下文（用于记录历史）
     QString m_currentCalcMode;
     QString m_currentCustomer;
@@ -93,10 +102,11 @@ private:
     void setupConnections();
     void setupStyle();
     void setupStatusBar();
+    void setupToolbarIcons();
     void updateTableView();
     void updateCustomerCombo();
     void applyLightStyle();
-    void importFilesAsync(const QStringList &filePaths);
+    void importFilesAsync(const QStringList &filePaths, bool useExistingMapping = false);
     void exportFilesAsync(const QString &outputDir, bool mergeExport, bool perClientExport);
 
     void showCenterProgress(const QString &text);

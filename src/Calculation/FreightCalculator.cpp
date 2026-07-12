@@ -137,26 +137,37 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
     if (!priceRule.region.isEmpty())
         ruleDesc += QStringLiteral("(%1)").arg(priceRule.region);
 
+    // ★ 辅助：生成加价描述 "名称(+金额/百分比/KG)"
+    auto increaseDesc = [](const PriceIncreaseRule &r) -> QString {
+        QString base = r.name.isEmpty() ? QStringLiteral("加价") : r.name;
+        switch (r.mode) {
+        case IncreaseMode::PerTicketFixed:   return QStringLiteral("%1(+%2元)").arg(base).arg(r.amount, 0, 'f', 1);
+        case IncreaseMode::PerTicketPercent: return QStringLiteral("%1(+%2%)").arg(base).arg(r.amount * 100, 0, 'f', 0);
+        case IncreaseMode::PerKg:            return QStringLiteral("%1(+%2元/kg)").arg(base).arg(r.amount, 0, 'f', 1);
+        }
+        return base;
+    };
+
     // 活动加价
     QDateTime bizTime(order.businessTime, QTime(0, 0));
     for (const PriceIncreaseRule &ar : m_globalRules.activityRules) {
         if (ar.isTimeInRange(bizTime))
-            ruleDesc += QStringLiteral("+%1").arg(ar.name.isEmpty() ? QStringLiteral("活动加价") : ar.name);
+            ruleDesc += increaseDesc(ar);
     }
     freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.activityRules, bizTime);
 
     // 临时加价
     for (const PriceIncreaseRule &tpi : m_globalRules.tempPriceIncreases) {
         if (tpi.isTimeInRange(bizTime))
-            ruleDesc += QStringLiteral("+%1").arg(tpi.name.isEmpty() ? QStringLiteral("临时加价") : tpi.name);
+            ruleDesc += increaseDesc(tpi);
     }
     freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.tempPriceIncreases, bizTime);
 
-    // 省份加价 — 策略分派，仅匹配当前订单省份
+    // 省份加价
     for (const PriceIncreaseRule &ppi : m_globalRules.provincePriceIncreases) {
         if (!ppi.isActive) continue;
         if (CalculationRule::provinceMatches(order.destinationProvince, ppi.province)) {
-            ruleDesc += QStringLiteral("+省份加价");
+            ruleDesc += increaseDesc(ppi);
             freight = getIncreaseFunc(ppi.mode)(freight, effectiveWeight, ppi.amount);
         }
     }

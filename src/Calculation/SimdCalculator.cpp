@@ -869,28 +869,39 @@ int SimdCalculator::calculateChunk(
                 ruleDesc += QStringLiteral("(%1)").arg(pr->region);
         }
 
-        // 活动加价 — 策略分派
+        // ★ 辅助：加价描述
+        auto increaseDesc = [](const PriceIncreaseRule &r) -> QString {
+            QString base = r.name.isEmpty() ? QStringLiteral("加价") : r.name;
+            switch (r.mode) {
+            case IncreaseMode::PerTicketFixed:   return QStringLiteral("%1(+%2元)").arg(base).arg(r.amount, 0, 'f', 1);
+            case IncreaseMode::PerTicketPercent: return QStringLiteral("%1(+%2%)").arg(base).arg(r.amount * 100, 0, 'f', 0);
+            case IncreaseMode::PerKg:            return QStringLiteral("%1(+%2元/kg)").arg(base).arg(r.amount, 0, 'f', 1);
+            }
+            return base;
+        };
+
+        // 活动加价
         QDateTime bizTime = QDateTime(orders[i].businessTime, QTime(0, 0));
         for (const PriceIncreaseRule &ar : globalRules.activityRules) {
             if (ar.isTimeInRange(bizTime)) {
-                ruleDesc += QStringLiteral("+%1").arg(ar.name.isEmpty() ? QStringLiteral("活动加价") : ar.name);
+                ruleDesc += increaseDesc(ar);
                 freight = getIncreaseFunc(ar.mode)(freight, effWeights[i], ar.amount);
             }
         }
 
-        // 临时加价 — 策略分派
+        // 临时加价
         for (const PriceIncreaseRule &tpi : globalRules.tempPriceIncreases) {
             if (tpi.isTimeInRange(bizTime)) {
-                ruleDesc += QStringLiteral("+%1").arg(tpi.name.isEmpty() ? QStringLiteral("临时加价") : tpi.name);
+                ruleDesc += increaseDesc(tpi);
                 freight = getIncreaseFunc(tpi.mode)(freight, effWeights[i], tpi.amount);
             }
         }
 
-        // 省份加价 — 公共匹配 + 策略分派
+        // 省份加价
         for (const PriceIncreaseRule &ppi : globalRules.provincePriceIncreases) {
             if (!ppi.isActive) continue;
             if (CalculationRule::provinceMatches(orders[i].destinationProvince, ppi.province)) {
-                ruleDesc += QStringLiteral("+省份加价");
+                ruleDesc += increaseDesc(ppi);
                 freight = getIncreaseFunc(ppi.mode)(freight, effWeights[i], ppi.amount);
             }
         }

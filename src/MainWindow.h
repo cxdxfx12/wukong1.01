@@ -84,6 +84,7 @@ private:
     BannerWidget *m_bannerWidget = nullptr;
 
     bool m_isCalculating = false;
+    int m_calcTotalRows = 0;  // 当前计算的总行数，进度显示用
 
     // 表头映射上下文（用于重新导入）
     QStringList m_lastImportedHeaders;

@@ -439,6 +439,10 @@ void MainWindow::updateCenterProgress(int percent)
 {
     if (m_centerProgress && m_overlayWidget && m_overlayWidget->isVisible()) {
         m_centerProgress->setValue(percent);
+        if (m_calcTotalRows > 0 && percent > 0 && percent < 100) {
+            int done = static_cast<int>(percent / 100.0 * m_calcTotalRows);
+            m_centerProgressLabel->setText(QStringLiteral("正在计算运费... %1 / %2 条").arg(done).arg(m_calcTotalRows));
+        }
     }
 }
 
@@ -720,6 +724,8 @@ void MainWindow::onImportClicked()
     ui->exportBtn->setEnabled(false);
 
     showCenterProgress(QStringLiteral("正在导入文件..."));
+    emit calcProgress(0);
+    m_calcTotalRows = m_currentOrders.size();
 
     importFilesAsync(filePaths);
 }
@@ -745,6 +751,7 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
     auto sharedMutex = std::make_shared<QMutex>();
     auto sharedProcessedRows = std::make_shared<QAtomicInt>(0);
     auto sharedTotalRows = std::make_shared<QAtomicInt>(0);
+    auto sharedMaxProgress = std::make_shared<QAtomicInt>(0); // ★ 防倒退锁
 
     // 捕获当前列映射，供所有文件使用
     QMap<QString, int> columnMapping = m_lastColumnMapping;
@@ -752,7 +759,7 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
     emit importProgress(0);
 
     auto processFunc = [self, filePaths, sharedOrders, sharedMutex, sharedProcessedRows,
-                        sharedTotalRows, columnMapping]() {
+                        sharedTotalRows, sharedMaxProgress, columnMapping]() {
         try {
             int fileCount = filePaths.size();
 
@@ -778,22 +785,33 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
                 int maxThreads = qMin(4, fileCount);
                 QThreadPool::globalInstance()->setMaxThreadCount(maxThreads);
 
+                // ★ 辅助：安全上报进度（只增不减）
+                auto reportProgress = [&](int rawPercent) {
+                    int p = qBound(0, rawPercent, 99);
+                    int prev = sharedMaxProgress->loadAcquire();
+                    // CAS 循环：只有新值 > 旧值才更新并上报
+                    while (p > prev) {
+                        if (sharedMaxProgress->testAndSetOrdered(prev, p)) {
+                            if (self) self->importProgress(p);
+                            break;
+                        }
+                        prev = sharedMaxProgress->loadAcquire();
+                    }
+                };
+
                 QList<QFuture<void>> importFutures;
                 for (int i = 0; i < fileCount; ++i) {
-                    importFutures.append(QtConcurrent::run([&, i]() {
+                    importFutures.append(QtConcurrent::run([&, i, reportProgress]() {
                         ExcelImporter importer;
                         int estimate = fileRowEstimates[i];
 
                         QObject::connect(&importer, &ExcelImporter::progressUpdated, self.data(),
-                            [self, sharedProcessedRows, sharedTotalRows, estimate](int filePercent) {
-                                if (!self) return;
+                            [&reportProgress, &sharedProcessedRows, &sharedTotalRows, estimate](int filePercent) {
                                 int localDone = static_cast<int>(filePercent / 100.0 * estimate);
                                 int globalDone = sharedProcessedRows->loadAcquire() + localDone;
                                 int total = sharedTotalRows->loadAcquire();
-                                if (total > 0) {
-                                    int percent = static_cast<int>(globalDone * 100.0 / total);
-                                    self->importProgress(qMin(99, percent));
-                                }
+                                if (total > 0)
+                                    reportProgress(static_cast<int>(globalDone * 100.0 / total));
                             }, Qt::QueuedConnection);
 
                         QList<OrderData> orders = importer.importFromFile(filePaths[i], columnMapping);
@@ -804,11 +822,8 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
 
                         int done = sharedProcessedRows->loadAcquire();
                         int total = sharedTotalRows->loadAcquire();
-                        if (total > 0 && done % 5000 == 0) {
-                            int percent = static_cast<int>(done * 100.0 / total);
-                            if (self) {
-                                self->importProgress(qMin(99, percent));
-                            }
+                        if (total > 0) {
+                            reportProgress(static_cast<int>(done * 100.0 / total));
                         }
                     }));
                 }
@@ -1062,8 +1077,10 @@ void MainWindow::onCalculateClicked()
                     errorCount.fetchAndAddRelaxed(errors);
 
                     int done = processed.fetchAndAddRelaxed(chunkCount) + chunkCount;
-                    if (done % 10000 == 0 || done == totalCount) {
-                        int percent = static_cast<int>(done * 100.0 / totalCount);
+                    int percent = static_cast<int>(done * 100.0 / totalCount);
+                    static thread_local int lastReported = -1;
+                    if (percent != lastReported || done == totalCount) {
+                        lastReported = percent;
                         if (self) {
                             self->calcProgress(qMin(99, percent));
                         }

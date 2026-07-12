@@ -763,9 +763,8 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
     auto sharedMutex = std::make_shared<QMutex>();
     auto sharedProcessedRows = std::make_shared<QAtomicInt>(0);
     auto sharedTotalRows = std::make_shared<QAtomicInt>(0);
-    auto sharedMaxProgress = std::make_shared<QAtomicInt>(0); // ★ 防倒退锁
+    auto sharedMaxProgress = std::make_shared<QAtomicInt>(0);
 
-    // 捕获当前列映射，供所有文件使用
     QMap<QString, int> columnMapping = m_lastColumnMapping;
 
     emit importProgress(0);
@@ -794,35 +793,11 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
             if (total > 0) {
                 sharedOrders->reserve(total + 1000);
 
-                // ★ 辅助：安全上报进度（只增不减）
-                auto reportProgress = [&](int rawPercent) {
-                    int p = qBound(0, rawPercent, 99);
-                    int prev = sharedMaxProgress->loadAcquire();
-                    // CAS 循环：只有新值 > 旧值才更新并上报
-                    while (p > prev) {
-                        if (sharedMaxProgress->testAndSetOrdered(prev, p)) {
-                            if (self) self->importProgress(p);
-                            break;
-                        }
-                        prev = sharedMaxProgress->loadAcquire();
-                    }
-                };
-
+                // 按文件并行导入：每文件独立线程，各自 ZipReader 互不干扰
                 QList<QFuture<void>> importFutures;
                 for (int i = 0; i < fileCount; ++i) {
-                    importFutures.append(QtConcurrent::run([&, i, reportProgress]() {
+                    importFutures.append(QtConcurrent::run([&, i]() {
                         ExcelImporter importer;
-                        int estimate = fileRowEstimates[i];
-
-                        QObject::connect(&importer, &ExcelImporter::progressUpdated, self.data(),
-                            [&reportProgress, &sharedProcessedRows, &sharedTotalRows, estimate](int filePercent) {
-                                int localDone = static_cast<int>(filePercent / 100.0 * estimate);
-                                int globalDone = sharedProcessedRows->loadAcquire() + localDone;
-                                int total = sharedTotalRows->loadAcquire();
-                                if (total > 0)
-                                    reportProgress(static_cast<int>(globalDone * 100.0 / total));
-                            }, Qt::QueuedConnection);
-
                         QList<OrderData> orders = importer.importFromFile(filePaths[i], columnMapping);
 
                         QMutexLocker locker(sharedMutex.get());
@@ -830,13 +805,16 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
                         sharedProcessedRows->fetchAndAddOrdered(orders.size());
 
                         int done = sharedProcessedRows->loadAcquire();
-                        int total = sharedTotalRows->loadAcquire();
-                        if (total > 0) {
-                            reportProgress(static_cast<int>(done * 100.0 / total));
+                        int tot = sharedTotalRows->loadAcquire();
+                        if (tot > 0) {
+                            int pct = static_cast<int>(done * 100.0 / tot);
+                            int prev = sharedMaxProgress->loadAcquire();
+                            while (pct > prev && !sharedMaxProgress->testAndSetOrdered(prev, pct))
+                                prev = sharedMaxProgress->loadAcquire();
+                            if (pct > prev && self) self->importProgress(pct);
                         }
                     }));
                 }
-
                 for (auto &f : importFutures) f.waitForFinished();
 
                 // ★ 运单号自动去重（运单号全局唯一，保留首次出现）

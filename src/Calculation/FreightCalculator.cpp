@@ -77,9 +77,8 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
 
     if (effectiveWeight <= 0 && m_globalRules.noWeightDefaultPrice > 0) {
         double result = m_globalRules.noWeightDefaultPrice;
-        QDateTime bizDt(order.businessTime, QTime(0, 0));
-        result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.activityRules, bizDt);
-        result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.tempPriceIncreases, bizDt);
+        result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.activityRules, order.businessTime);
+        result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.tempPriceIncreases, order.businessTime);
         // 省份加价 — 无重量时也要匹配（PerKg 无效）
         for (const PriceIncreaseRule &ppi : m_globalRules.provincePriceIncreases) {
             if (!ppi.isActive) continue;
@@ -148,20 +147,19 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
         return base;
     };
 
-    // 活动加价
-    QDateTime bizTime(order.businessTime, QTime(0, 0));
+    // 活动加价（只比较日期）
     for (const PriceIncreaseRule &ar : m_globalRules.activityRules) {
-        if (ar.isTimeInRange(bizTime))
+        if (ar.isDateInRange(order.businessTime))
             ruleDesc += increaseDesc(ar);
     }
-    freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.activityRules, bizTime);
+    freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.activityRules, order.businessTime);
 
     // 临时加价
     for (const PriceIncreaseRule &tpi : m_globalRules.tempPriceIncreases) {
-        if (tpi.isTimeInRange(bizTime))
+        if (tpi.isDateInRange(order.businessTime))
             ruleDesc += increaseDesc(tpi);
     }
-    freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.tempPriceIncreases, bizTime);
+    freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.tempPriceIncreases, order.businessTime);
 
     // 省份加价
     for (const PriceIncreaseRule &ppi : m_globalRules.provincePriceIncreases) {

@@ -52,7 +52,7 @@ public:
                                        const QList<PriceIncreaseRule> &rules);
     static double applyPriceIncreases(double freight, double weight,
                                        const QList<PriceIncreaseRule> &rules,
-                                       const QDateTime &timeFilter);
+                                       const QDate &dateFilter);
 
     // ★ 省份模糊匹配 — 消除 3 处重复代码
     static bool provinceMatches(const QString &orderProvince, const QString &ruleProvince);

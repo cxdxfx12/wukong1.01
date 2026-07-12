@@ -106,10 +106,15 @@ void GlobalRulesDialog::setupUI()
         lay->setContentsMargins(8, 8, 8, 8);
         lay->setSpacing(8);
 
+        auto *hint = new QLabel(QStringLiteral("※ 开始/结束日期对应表格的「业务日期」列，非当前日期，日期不在范围内则不生效"), tab);
+        hint->setStyleSheet(QStringLiteral("color: #e74c3c; font-size: 11px; padding: 2px 0;"));
+        hint->setWordWrap(true);
+        lay->addWidget(hint);
+
         table = new QTableWidget(0, 6, tab);
         table->setHorizontalHeaderLabels({
-            QStringLiteral("名称"), QStringLiteral("开始时间"),
-            QStringLiteral("结束时间"), QStringLiteral("加价数值"),
+            QStringLiteral("名称"), QStringLiteral("开始日期"),
+            QStringLiteral("结束日期"), QStringLiteral("加价数值"),
             QStringLiteral("加价模式"), QStringLiteral("启用")});
         table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
         table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
@@ -143,13 +148,13 @@ void GlobalRulesDialog::setupUI()
     m_tabWidget->addTab(
         createTimeTable(m_activityTable, m_addActivityBtn, m_removeActivityBtn,
                         m_tabWidget, QStringLiteral("活动加价")),
-        QStringLiteral("活动加价"));
+        QStringLiteral("活动加价(*)"));
 
     // Tab2: 临时加价
     m_tabWidget->addTab(
         createTimeTable(m_tempIncreaseTable, m_addTempBtn, m_removeTempBtn,
                         m_tabWidget, QStringLiteral("临时加价")),
-        QStringLiteral("临时加价"));
+        QStringLiteral("临时加价(*)"));
 
     // Tab3: 省份加价 — 省份 | 加价数值 | 加价模式 | 启用
     {
@@ -186,7 +191,7 @@ void GlobalRulesDialog::setupUI()
         provLay->addWidget(m_provinceIncreaseTable, 1);
         provLay->addLayout(provBtnLay);
 
-        m_tabWidget->addTab(provTab, QStringLiteral("省份加价"));
+        m_tabWidget->addTab(provTab, QStringLiteral("省份加价(*)"));
     }
 
     mainLayout->addWidget(m_tabWidget, 1);
@@ -215,10 +220,10 @@ void GlobalRulesDialog::setupUI()
         m_activityTable->insertRow(row);
         m_activityTable->setItem(row, 0, new QTableWidgetItem(QStringLiteral("新活动")));
         auto *s = new QDateTimeEdit(QDateTime::currentDateTime(), m_activityTable);
-        s->setDisplayFormat(QStringLiteral("yyyy-MM-dd HH:mm")); s->setCalendarPopup(true);
+        s->setDisplayFormat(QStringLiteral("yyyy-MM-dd")); s->setCalendarPopup(true);
         m_activityTable->setCellWidget(row, 1, s);
         auto *e = new QDateTimeEdit(QDateTime::currentDateTime().addDays(7), m_activityTable);
-        e->setDisplayFormat(QStringLiteral("yyyy-MM-dd HH:mm")); e->setCalendarPopup(true);
+        e->setDisplayFormat(QStringLiteral("yyyy-MM-dd")); e->setCalendarPopup(true);
         m_activityTable->setCellWidget(row, 2, e);
         auto *v = new QDoubleSpinBox(m_activityTable);
         v->setRange(0, 99999); v->setDecimals(2); v->setValue(0.1);
@@ -240,10 +245,10 @@ void GlobalRulesDialog::setupUI()
         m_tempIncreaseTable->insertRow(row);
         m_tempIncreaseTable->setItem(row, 0, new QTableWidgetItem(QStringLiteral("新规则")));
         auto *s = new QDateTimeEdit(QDateTime::currentDateTime(), m_tempIncreaseTable);
-        s->setDisplayFormat(QStringLiteral("yyyy-MM-dd HH:mm")); s->setCalendarPopup(true);
+        s->setDisplayFormat(QStringLiteral("yyyy-MM-dd")); s->setCalendarPopup(true);
         m_tempIncreaseTable->setCellWidget(row, 1, s);
         auto *e = new QDateTimeEdit(QDateTime::currentDateTime().addDays(7), m_tempIncreaseTable);
-        e->setDisplayFormat(QStringLiteral("yyyy-MM-dd HH:mm")); e->setCalendarPopup(true);
+        e->setDisplayFormat(QStringLiteral("yyyy-MM-dd")); e->setCalendarPopup(true);
         m_tempIncreaseTable->setCellWidget(row, 2, e);
         auto *v = new QDoubleSpinBox(m_tempIncreaseTable);
         v->setRange(0, 99999); v->setDecimals(2); v->setValue(1.0);
@@ -325,10 +330,10 @@ void GlobalRulesDialog::loadRules()
             table->insertRow(row);
             table->setItem(row, 0, new QTableWidgetItem(r.name));
             auto *s = new QDateTimeEdit(r.startTime, table);
-            s->setDisplayFormat(QStringLiteral("yyyy-MM-dd HH:mm")); s->setCalendarPopup(true);
+            s->setDisplayFormat(QStringLiteral("yyyy-MM-dd")); s->setCalendarPopup(true);
             table->setCellWidget(row, 1, s);
             auto *e = new QDateTimeEdit(r.endTime, table);
-            e->setDisplayFormat(QStringLiteral("yyyy-MM-dd HH:mm")); e->setCalendarPopup(true);
+            e->setDisplayFormat(QStringLiteral("yyyy-MM-dd")); e->setCalendarPopup(true);
             table->setCellWidget(row, 2, e);
             auto *v = new QDoubleSpinBox(table);
             v->setRange(0, 99999); v->setDecimals(2); v->setValue(r.amount);

@@ -881,9 +881,8 @@ int SimdCalculator::calculateChunk(
         };
 
         // 活动加价
-        QDateTime bizTime = QDateTime(orders[i].businessTime, QTime(0, 0));
         for (const PriceIncreaseRule &ar : globalRules.activityRules) {
-            if (ar.isTimeInRange(bizTime)) {
+            if (ar.isDateInRange(orders[i].businessTime)) {
                 ruleDesc += increaseDesc(ar);
                 freight = getIncreaseFunc(ar.mode)(freight, effWeights[i], ar.amount);
             }
@@ -891,7 +890,7 @@ int SimdCalculator::calculateChunk(
 
         // 临时加价
         for (const PriceIncreaseRule &tpi : globalRules.tempPriceIncreases) {
-            if (tpi.isTimeInRange(bizTime)) {
+            if (tpi.isDateInRange(orders[i].businessTime)) {
                 ruleDesc += increaseDesc(tpi);
                 freight = getIncreaseFunc(tpi.mode)(freight, effWeights[i], tpi.amount);
             }

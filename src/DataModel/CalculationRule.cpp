@@ -192,12 +192,12 @@ double CalculationRule::applyPriceIncreases(double freight, double weight,
 
 double CalculationRule::applyPriceIncreases(double freight, double weight,
                                               const QList<PriceIncreaseRule> &rules,
-                                              const QDateTime &timeFilter)
+                                              const QDate &dateFilter)
 {
     double result = freight;
     for (const PriceIncreaseRule &rule : rules) {
         if (!rule.isActive) continue;
-        if (!rule.isTimeInRange(timeFilter)) continue;
+        if (!rule.isDateInRange(dateFilter)) continue;
         result = getIncreaseFunc(rule.mode)(result, weight, rule.amount);
     }
     return result;

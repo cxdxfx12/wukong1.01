@@ -65,9 +65,11 @@ struct PriceIncreaseRule {
     QString province;              // 目标省份（省份加价规则使用）
     bool isActive = true;          // 是否启用
 
-    /// 判断当前时间是否在规则生效范围内（活动/临时规则用）
-    bool isTimeInRange(const QDateTime &time) const {
-        return isActive && time >= startTime && time <= endTime;
+    /// 判断日期是否在规则生效范围内（活动/临时规则用，只比较年月日）
+    bool isDateInRange(const QDate &date) const {
+        if (!isActive || !date.isValid()) return false;
+        if (!startTime.isValid() || !endTime.isValid()) return false;
+        return date >= startTime.date() && date <= endTime.date();
     }
 };
 

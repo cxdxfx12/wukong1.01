@@ -15,7 +15,7 @@ int main(int argc, char *argv[])
 
     // 应用信息
     QApplication::setApplicationName("悟空运费结算");
-    QApplication::setApplicationVersion("1.0.6");
+    QApplication::setApplicationVersion("1.0.7");
     QApplication::setOrganizationName("杭州喵喵至家网络有限公司");
 
     // 设置应用程序图标

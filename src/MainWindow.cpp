@@ -725,7 +725,7 @@ void MainWindow::onImportClicked()
     ui->exportBtn->setEnabled(false);
 
     showCenterProgress(QStringLiteral("正在导入文件..."));
-    emit calcProgress(0);
+    emit importProgress(0);
     m_calcTotalRows = m_currentOrders.size();
 
     importFilesAsync(filePaths);
@@ -919,6 +919,8 @@ void MainWindow::onCalculateClicked()
     ui->progressBar->setValue(0);
 
     showCenterProgress(QStringLiteral("正在计算运费..."));
+    emit calcProgress(0);
+    QApplication::processEvents();
 
     // 保存当前计算上下文，用于历史记录
     m_currentCalcMode = ui->modeCombo->currentText();

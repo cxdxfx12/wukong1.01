@@ -90,6 +90,7 @@ private:
     QStringList m_lastImportedHeaders;
     QMap<QString, int> m_lastColumnMapping;
     QString m_lastImportedFilePath;
+    int m_lastDedupCount = 0;  // 最近一次导入去重条数
 
     // 当前计算上下文（用于记录历史）
     QString m_currentCalcMode;

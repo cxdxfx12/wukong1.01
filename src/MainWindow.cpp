@@ -726,6 +726,7 @@ void MainWindow::onImportClicked()
     m_currentFilePaths = filePaths;
     m_currentOrders.clear();
     m_currentPage = 1;
+    m_lastDedupCount = 0;
 
     if (statusLabel)
         statusLabel->setText(QStringLiteral("正在导入..."));
@@ -837,6 +838,27 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
                 }
 
                 for (auto &f : importFutures) f.waitForFinished();
+
+                // ★ 运单号自动去重（运单号全局唯一，保留首次出现）
+                if (!sharedOrders->isEmpty()) {
+                    QSet<QString> seen;
+                    int before = sharedOrders->size();
+                    auto it = sharedOrders->begin();
+                    while (it != sharedOrders->end()) {
+                        if (it->waybillNo.isEmpty() || seen.contains(it->waybillNo)) {
+                            it = sharedOrders->erase(it);
+                        } else {
+                            seen.insert(it->waybillNo);
+                            ++it;
+                        }
+                    }
+                    sharedTotalRows->storeRelease(sharedOrders->size());
+                    // 记录去重数量，传给回调
+                    int dupCount = before - sharedOrders->size();
+                    QMetaObject::invokeMethod(self.data(), [self, dupCount]() {
+                        if (self) self->m_lastDedupCount = dupCount;
+                    }, Qt::QueuedConnection);
+                }
             }
         } catch (const std::exception &e) {
             QString errorMsg = QStringLiteral("导入异常: %1").arg(QString::fromUtf8(e.what()));
@@ -898,8 +920,12 @@ void MainWindow::onImportFinished()
     }
 
     auto *statusLabel = statusBar()->findChild<QLabel*>(QStringLiteral("statusLabel"));
-    if (statusLabel)
-        statusLabel->setText(QStringLiteral("导入完成，共 %1 条").arg(m_currentOrders.size()));
+    if (statusLabel) {
+        if (m_lastDedupCount > 0)
+            statusLabel->setText(QStringLiteral("导入完成，共 %1 条（去重 %2 条）").arg(m_currentOrders.size()).arg(m_lastDedupCount));
+        else
+            statusLabel->setText(QStringLiteral("导入完成，共 %1 条").arg(m_currentOrders.size()));
+    }
 
     ui->progressBar->setValue(100);
 

@@ -427,8 +427,12 @@ void MainWindow::showCenterProgress(const QString &text)
         ui->dataTableView->width(),
         ui->dataTableView->height());
     m_overlayWidget->raise();
-    m_overlayWidget->setVisible(true);
-    m_overlayWidget->repaint();  // 强制立即刷新，避免快速hide/show切换时状态滞后
+
+    // 如果已可见，直接刷新内容；否则先显示再刷新
+    if (!m_overlayWidget->isVisible()) {
+        m_overlayWidget->show();
+    }
+    m_overlayWidget->repaint();
 }
 
 void MainWindow::hideCenterProgress()
@@ -726,7 +730,6 @@ void MainWindow::onImportClicked()
 
     showCenterProgress(QStringLiteral("正在导入文件..."));
     emit importProgress(0);
-    m_calcTotalRows = m_currentOrders.size();
 
     importFilesAsync(filePaths);
 }
@@ -870,13 +873,18 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
 
 void MainWindow::onImportFinished()
 {
-    hideCenterProgress();
+    bool willAutoCalc = !m_currentOrders.isEmpty();
+
+    // ★ 如果即将自动计算，不隐藏 overlay，让计算直接复用并更新内容
+    if (!willAutoCalc) {
+        hideCenterProgress();
+    }
     ui->importBtn->setEnabled(true);
     ui->headerMappingBtn->setEnabled(true);
     ui->calculateBtn->setEnabled(true);
     ui->exportBtn->setEnabled(true);
 
-    if (!m_currentOrders.isEmpty()) {
+    if (willAutoCalc) {
         m_currentPage = 1;
         updateTableView();
 
@@ -892,7 +900,7 @@ void MainWindow::onImportFinished()
     ui->progressBar->setValue(100);
 
     // 导入完成后自动开始计算
-    if (!m_currentOrders.isEmpty()) {
+    if (willAutoCalc) {
         onCalculateClicked();
     }
 }
@@ -919,6 +927,7 @@ void MainWindow::onCalculateClicked()
     ui->progressBar->setValue(0);
 
     showCenterProgress(QStringLiteral("正在计算运费..."));
+    m_calcTotalRows = m_currentOrders.size();  // ★ 必须在计算前设置总行数
     emit calcProgress(0);
     QApplication::processEvents();
 

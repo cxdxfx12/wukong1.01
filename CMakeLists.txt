@@ -8,7 +8,7 @@ if(WIN32)
     endif()
 endif()
 
-project(WukongFreight VERSION 1.1.0 LANGUAGES CXX)
+project(WukongFreight VERSION 1.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -1,2 +1,34 @@
-// 应用程序图标资源
+// 应用程序图标
 1 ICON "app_icon.ico"
+
+// ★ VERSIONINFO — 防杀软误报，声明软件身份
+#include <windows.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     1,1,8,0
+PRODUCTVERSION  1,1,8,0
+FILEFLAGSMASK   0x3fL
+FILEFLAGS       0x0L
+FILEOS          VOS__WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404B0"
+        BEGIN
+            VALUE "CompanyName",      "杭州喵喵至家网络有限公司"
+            VALUE "FileDescription",  "悟空运费结算"
+            VALUE "FileVersion",      "1.1.8"
+            VALUE "InternalName",     "WukongFreight"
+            VALUE "LegalCopyright",   "Copyright (C) 2026 杭州喵喵至家"
+            VALUE "OriginalFilename", "悟空结算.exe"
+            VALUE "ProductName",      "悟空运费结算"
+            VALUE "ProductVersion",   "1.1.8"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0804, 0x04B0
+    END
+END

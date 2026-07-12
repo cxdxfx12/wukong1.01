@@ -427,7 +427,8 @@ void MainWindow::showCenterProgress(const QString &text)
         ui->dataTableView->width(),
         ui->dataTableView->height());
     m_overlayWidget->raise();
-    m_overlayWidget->show();
+    m_overlayWidget->setVisible(true);
+    m_overlayWidget->repaint();  // 强制立即刷新，避免快速hide/show切换时状态滞后
 }
 
 void MainWindow::hideCenterProgress()
@@ -437,9 +438,9 @@ void MainWindow::hideCenterProgress()
 
 void MainWindow::updateCenterProgress(int percent)
 {
-    if (m_centerProgress && m_overlayWidget && m_overlayWidget->isVisible()) {
+    if (m_centerProgress && m_overlayWidget) {
         m_centerProgress->setValue(percent);
-        if (m_calcTotalRows > 0 && percent > 0 && percent < 100) {
+        if (m_calcTotalRows > 0 && percent >= 0 && percent < 100) {
             int done = static_cast<int>(percent / 100.0 * m_calcTotalRows);
             m_centerProgressLabel->setText(QStringLiteral("正在计算运费... %1 / %2 条").arg(done).arg(m_calcTotalRows));
         }
@@ -452,7 +453,7 @@ void MainWindow::throttledProgress(int percent)
         return;
 
     if (percent == 0 || percent == 100 || percent - m_lastProgressPercent >= 1) {
-        if (percent != 100 && m_lastProgressTime.isValid() && m_lastProgressTime.elapsed() < 30) {
+        if (percent != 100 && percent != 0 && m_lastProgressTime.isValid() && m_lastProgressTime.elapsed() < 30) {
             return;
         }
         m_lastProgressPercent = percent;

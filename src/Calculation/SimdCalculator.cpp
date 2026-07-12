@@ -869,50 +869,29 @@ int SimdCalculator::calculateChunk(
                 ruleDesc += QStringLiteral("(%1)").arg(pr->region);
         }
 
-        // 活动加价
+        // 活动加价 — 策略分派
         QDateTime bizTime = QDateTime(orders[i].businessTime, QTime(0, 0));
         for (const PriceIncreaseRule &ar : globalRules.activityRules) {
             if (ar.isTimeInRange(bizTime)) {
                 ruleDesc += QStringLiteral("+%1").arg(ar.name.isEmpty() ? QStringLiteral("活动加价") : ar.name);
-                switch (ar.mode) {
-                case IncreaseMode::PerTicketFixed:   freight += ar.amount; break;
-                case IncreaseMode::PerTicketPercent: freight *= (1.0 + ar.amount); break;
-                case IncreaseMode::PerKg:            freight += effWeights[i] * ar.amount; break;
-                }
+                freight = getIncreaseFunc(ar.mode)(freight, effWeights[i], ar.amount);
             }
         }
 
-        // 临时加价
+        // 临时加价 — 策略分派
         for (const PriceIncreaseRule &tpi : globalRules.tempPriceIncreases) {
             if (tpi.isTimeInRange(bizTime)) {
                 ruleDesc += QStringLiteral("+%1").arg(tpi.name.isEmpty() ? QStringLiteral("临时加价") : tpi.name);
-                switch (tpi.mode) {
-                case IncreaseMode::PerTicketFixed:   freight += tpi.amount; break;
-                case IncreaseMode::PerTicketPercent: freight *= (1.0 + tpi.amount); break;
-                case IncreaseMode::PerKg:            freight += effWeights[i] * tpi.amount; break;
-                }
+                freight = getIncreaseFunc(tpi.mode)(freight, effWeights[i], tpi.amount);
             }
         }
 
-        // 省份加价 — 模糊匹配
-        auto normProv = [](QString p) -> QString {
-            static const QStringList sf = {QStringLiteral("省"),QStringLiteral("市"),QStringLiteral("自治区"),QStringLiteral("特别行政区")};
-            for (const QString &s : sf) { if (p.endsWith(s)) { p.chop(s.size()); break; } }
-            return p.trimmed();
-        };
-        QString np = normProv(orders[i].destinationProvince);
+        // 省份加价 — 公共匹配 + 策略分派
         for (const PriceIncreaseRule &ppi : globalRules.provincePriceIncreases) {
             if (!ppi.isActive) continue;
-            QString rp = normProv(ppi.province);
-            if (rp == np || ppi.province == orders[i].destinationProvince
-                || np.contains(rp) || rp.contains(np)
-                || (np.size() >= 2 && rp.size() >= 2 && np.left(2) == rp.left(2))) {
+            if (CalculationRule::provinceMatches(orders[i].destinationProvince, ppi.province)) {
                 ruleDesc += QStringLiteral("+省份加价");
-                switch (ppi.mode) {
-                case IncreaseMode::PerTicketFixed:   freight += ppi.amount; break;
-                case IncreaseMode::PerTicketPercent: freight *= (1.0 + ppi.amount); break;
-                case IncreaseMode::PerKg:            freight += effWeights[i] * ppi.amount; break;
-                }
+                freight = getIncreaseFunc(ppi.mode)(freight, effWeights[i], ppi.amount);
             }
         }
 

@@ -193,22 +193,26 @@ void QuickTestWidget::recalc()
     order.isValid = true;
 
     QString ruleDesc;
-    double freight = m_calculator->calculateFreight(order, rule);
+    double freight = m_calculator->calculateFreightDetail(order, rule, ruleDesc);
 
-    if (freight < 0) {
+    if (freight <= 0 && actualWeight <= 0 && volWeight <= 0) {
+        m_resultLabel->setText(QStringLiteral("运费: 0.00 元"));
+        m_detailLabel->setText(QStringLiteral("重量为 0"));
+    } else if (freight <= 0 && !ruleDesc.isEmpty()) {
         m_resultLabel->setText(QStringLiteral("无法计算"));
-        m_detailLabel->setText(QStringLiteral("未找到该省份的报价规则"));
+        m_detailLabel->setText(ruleDesc);
     } else {
         double effectiveWeight = qMax(actualWeight, volWeight);
         m_resultLabel->setText(QStringLiteral("运费: %1 元").arg(freight, 0, 'f', 2));
 
         QString modeText = m_modeCombo->currentText();
-        QString weightInfo = QStringLiteral("实际: %1 kg / 体积: %2 kg / 计费: %3 kg")
+        QString weightInfo = QStringLiteral("计费重量: %1 kg (实际 %2 / 体积 %3)")
+            .arg(effectiveWeight, 0, 'f', 2)
             .arg(actualWeight, 0, 'f', 2)
-            .arg(volWeight, 0, 'f', 2)
-            .arg(effectiveWeight, 0, 'f', 2);
+            .arg(volWeight, 0, 'f', 2);
 
-        m_detailLabel->setText(QStringLiteral("%1\n计算模式: %2").arg(weightInfo).arg(modeText));
+        m_detailLabel->setText(QStringLiteral("%1\n模式: %2\n规则: %3")
+            .arg(weightInfo).arg(modeText).arg(ruleDesc));
     }
 }
 

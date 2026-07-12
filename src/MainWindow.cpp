@@ -153,7 +153,14 @@ void MainWindow::setupConnections()
     connect(m_calculator, &FreightCalculator::progressUpdated, this, &MainWindow::throttledProgress);
     connect(m_calculator, &FreightCalculator::calculationComplete, this, &MainWindow::onCalculationComplete);
 
-    connect(m_importWatcher, &QFutureWatcher<void>::finished, this, &MainWindow::onImportFinished);
+    // ★ 不通过 watcher 触发 onImportFinished，避免与 invokeMethod 回调重复
+    // onImportFinished 由 processFunc 末尾的 invokeMethod 统一触发
+    connect(m_importWatcher, &QFutureWatcher<void>::finished, this, [this]() {
+        // 仅作兜底：如果 invokeMethod 回调未执行，手动触发
+        if (!m_currentOrders.isEmpty() && !m_isCalculating) {
+            onImportFinished();
+        }
+    });
     connect(m_exportWatcher, &QFutureWatcher<void>::finished, this, &MainWindow::onExportFinished);
     connect(m_batchWatcher, &QFutureWatcher<void>::finished, this, &MainWindow::onAllFilesProcessed);
 
@@ -786,9 +793,6 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
             if (total > 0) {
                 sharedOrders->reserve(total + 1000);
 
-                int maxThreads = qMin(4, fileCount);
-                QThreadPool::globalInstance()->setMaxThreadCount(maxThreads);
-
                 // ★ 辅助：安全上报进度（只增不减）
                 auto reportProgress = [&](int rawPercent) {
                     int p = qBound(0, rawPercent, 99);
@@ -984,6 +988,7 @@ void MainWindow::onCalculateClicked()
         int totalCount = orders.size();
         QAtomicInt processed(0);
         QAtomicInt errorCount(0);
+        QAtomicInt lastPercent(-1);  // ★ 防重复上报，替代 thread_local
         int effectiveThreads = qMax(1, qMin(threadCount, QThread::idealThreadCount()));
 
         QMap<QString, QPair<int, int>> clientRanges;
@@ -1090,9 +1095,10 @@ void MainWindow::onCalculateClicked()
 
                     int done = processed.fetchAndAddRelaxed(chunkCount) + chunkCount;
                     int percent = static_cast<int>(done * 100.0 / totalCount);
-                    static thread_local int lastReported = -1;
-                    if (percent != lastReported || done == totalCount) {
-                        lastReported = percent;
+                    int prevPct = lastPercent.loadAcquire();
+                    while (percent > prevPct && !lastPercent.testAndSetOrdered(prevPct, percent))
+                        prevPct = lastPercent.loadAcquire();
+                    if (percent > prevPct || done == totalCount) {
                         if (self) {
                             self->calcProgress(qMin(99, percent));
                         }

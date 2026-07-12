@@ -155,23 +155,37 @@ double CalculationRule::calculateFullAdditional(double weight, const QList<Weigh
     return result;
 }
 
+// ★ 省份模糊匹配 — 3 重匹配：精确 → contains → 两字前缀
+bool CalculationRule::provinceMatches(const QString &orderProvince, const QString &ruleProvince)
+{
+    if (orderProvince.isEmpty() || ruleProvince.isEmpty()) return false;
+
+    // 规范化：去掉 "省/市/自治区/特别行政区" 后缀
+    auto norm = [](QString p) -> QString {
+        static const QStringList sf = {
+            QStringLiteral("省"), QStringLiteral("市"),
+            QStringLiteral("自治区"), QStringLiteral("特别行政区")
+        };
+        for (const QString &s : sf) { if (p.endsWith(s)) { p.chop(s.size()); break; } }
+        return p.trimmed();
+    };
+
+    QString np = norm(orderProvince);
+    QString rp = norm(ruleProvince);
+    return rp == np                                          // 精确匹配
+        || ruleProvince == orderProvince                     // 原始名完全相等
+        || np.contains(rp) || rp.contains(np)                // 包含匹配
+        || (np.size() >= 2 && rp.size() >= 2 && np.left(2) == rp.left(2)); // 两字前缀
+}
+
+// ★ 统一的加价应用 — 使用函数指针表消除 switch/case
 double CalculationRule::applyPriceIncreases(double freight, double weight,
                                               const QList<PriceIncreaseRule> &rules)
 {
     double result = freight;
     for (const PriceIncreaseRule &rule : rules) {
         if (!rule.isActive) continue;
-        switch (rule.mode) {
-        case IncreaseMode::PerTicketFixed:
-            result += rule.amount;
-            break;
-        case IncreaseMode::PerTicketPercent:
-            result *= (1.0 + rule.amount);
-            break;
-        case IncreaseMode::PerKg:
-            result += weight * rule.amount;
-            break;
-        }
+        result = getIncreaseFunc(rule.mode)(result, weight, rule.amount);
     }
     return result;
 }
@@ -184,17 +198,17 @@ double CalculationRule::applyPriceIncreases(double freight, double weight,
     for (const PriceIncreaseRule &rule : rules) {
         if (!rule.isActive) continue;
         if (!rule.isTimeInRange(timeFilter)) continue;
-        switch (rule.mode) {
-        case IncreaseMode::PerTicketFixed:
-            result += rule.amount;
-            break;
-        case IncreaseMode::PerTicketPercent:
-            result *= (1.0 + rule.amount);
-            break;
-        case IncreaseMode::PerKg:
-            result += weight * rule.amount;
-            break;
-        }
+        result = getIncreaseFunc(rule.mode)(result, weight, rule.amount);
     }
     return result;
+}
+
+// Strategy dispatch for calculation modes
+CalculationRule::CalcSegmentFunc CalculationRule::getCalcFunc(Mode mode)
+{
+    switch (mode) {
+    case Mode::FullAdditional: return calculateFullAdditional;
+    case Mode::HundredGram:    return calculateHundredGram;
+    default:                   return calculateStandard;
+    }
 }

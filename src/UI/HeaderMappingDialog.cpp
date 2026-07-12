@@ -264,7 +264,8 @@ void HeaderMappingDialog::onTemplateSelected(int index)
         return;
     }
 
-    // 用模板映射覆盖默认映射（只覆盖模板中有值的字段）
+    // 先恢复自动检测结果，再用模板覆盖（避免前一个模板的残留字段）
+    m_defaultMapping = m_autoMapping;
     for (auto it = tplMapping.constBegin(); it != tplMapping.constEnd(); ++it)
         m_defaultMapping[it.key()] = it.value();
 

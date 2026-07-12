@@ -80,19 +80,12 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
         QDateTime bizDt(order.businessTime, QTime(0, 0));
         result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.activityRules, bizDt);
         result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.tempPriceIncreases, bizDt);
-        // 省份加价 — 无重量时也要匹配省份
-        QString np = normalizeProvince(order.destinationProvince);
+        // 省份加价 — 无重量时也要匹配（PerKg 无效）
         for (const PriceIncreaseRule &ppi : m_globalRules.provincePriceIncreases) {
             if (!ppi.isActive) continue;
-            QString rp = normalizeProvince(ppi.province);
-            if (rp == np || ppi.province == order.destinationProvince
-                || np.contains(rp) || rp.contains(np)
-                || (np.size() >= 2 && rp.size() >= 2 && np.left(2) == rp.left(2))) {
-                switch (ppi.mode) {
-                case IncreaseMode::PerTicketFixed:   result += ppi.amount; break;
-                case IncreaseMode::PerTicketPercent: result *= (1.0 + ppi.amount); break;
-                case IncreaseMode::PerKg:            break;  // 无重量，PerKg无效
-                }
+            if (CalculationRule::provinceMatches(order.destinationProvince, ppi.province)) {
+                if (ppi.mode != IncreaseMode::PerKg)  // 无重量时 PerKg 无效
+                    result = getIncreaseFunc(ppi.mode)(result, 0, ppi.amount);
             }
         }
         result = std::round(result * 100.0) / 100.0;
@@ -119,23 +112,17 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
 
     double freight = 0.0;
     bool matched = false;
+    auto calcFunc = CalculationRule::getCalcFunc(calcMode);
     for (const WeightSegment &seg : priceRule.segments) {
         if (CalculationRule::isWeightInRange(effectiveWeight, seg)) {
-            // 优先使用全局计算模式
-            if (calcMode == CalculationRule::Mode::FullAdditional) {
-                freight = CalculationRule::calculateFullAdditional(effectiveWeight, priceRule.segments);
-            } else if (calcMode == CalculationRule::Mode::HundredGram) {
-                freight = CalculationRule::calculateHundredGram(effectiveWeight, priceRule.segments);
-            } else {
-                // 默认模式：使用标准计算
-                freight = CalculationRule::calculateStandard(effectiveWeight, priceRule.segments);
-            }
+            freight = calcFunc(effectiveWeight, priceRule.segments);
             matched = true;
             break;
         }
     }
 
     if (!matched) {
+        outRuleDesc = QStringLiteral("未匹配到重量段(重量=%1kg)").arg(effectiveWeight, 0, 'f', 2);
         return 0.0;
     }
 
@@ -165,21 +152,12 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
     }
     freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.tempPriceIncreases, bizTime);
 
-    // 省份加价 — 仅匹配当前订单省份
-    QString normOrderProv = normalizeProvince(order.destinationProvince);
+    // 省份加价 — 策略分派，仅匹配当前订单省份
     for (const PriceIncreaseRule &ppi : m_globalRules.provincePriceIncreases) {
         if (!ppi.isActive) continue;
-        QString ruleProv = normalizeProvince(ppi.province);
-        // 三重匹配：精确 > contains > 两字前缀
-        if (ruleProv == normOrderProv || ppi.province == order.destinationProvince
-            || normOrderProv.contains(ruleProv) || ruleProv.contains(normOrderProv)
-            || (normOrderProv.size() >= 2 && ruleProv.size() >= 2 && normOrderProv.left(2) == ruleProv.left(2))) {
+        if (CalculationRule::provinceMatches(order.destinationProvince, ppi.province)) {
             ruleDesc += QStringLiteral("+省份加价");
-            switch (ppi.mode) {
-            case IncreaseMode::PerTicketFixed:   freight += ppi.amount; break;
-            case IncreaseMode::PerTicketPercent: freight *= (1.0 + ppi.amount); break;
-            case IncreaseMode::PerKg:            freight += effectiveWeight * ppi.amount; break;
-            }
+            freight = getIncreaseFunc(ppi.mode)(freight, effectiveWeight, ppi.amount);
         }
     }
 

@@ -48,13 +48,18 @@ public:
     static double calculateFullAdditional(double weight, const QList<WeightSegment> &segments);
 
     // ★ 统一加价函数：遍历规则列表，按规则自身的 mode 执行加价
-    // weight 用于 PerKg 模式；timeFilter 非空时只应用 isTimeInRange 的规则（活动/临时）
     static double applyPriceIncreases(double freight, double weight,
                                        const QList<PriceIncreaseRule> &rules);
-    // timeFilter 版本：只应用时间范围内的规则
     static double applyPriceIncreases(double freight, double weight,
                                        const QList<PriceIncreaseRule> &rules,
                                        const QDateTime &timeFilter);
+
+    // ★ 省份模糊匹配 — 消除 3 处重复代码
+    static bool provinceMatches(const QString &orderProvince, const QString &ruleProvince);
+
+    // ★ 计算模式分派 — 消除 FreightCalculator 中的 if/else 链
+    using CalcSegmentFunc = double (*)(double weight, const QList<WeightSegment> &segments);
+    static CalcSegmentFunc getCalcFunc(Mode mode);
 };
 
 #endif // CALCULATIONRULE_H

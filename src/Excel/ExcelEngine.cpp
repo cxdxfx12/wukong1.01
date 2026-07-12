@@ -52,30 +52,39 @@ int ExcelEngine::countRowsFast(const QString &filePath)
     if (!zip.exists())
         return 0;
 
-    QByteArray sheetXml = zip.fileData("xl/worksheets/sheet1.xml");
-    if (sheetXml.isEmpty())
-        return 0;
+    int totalRows = 0;
 
-    QXmlStreamReader rd(sheetXml);
-    int rowCount = 0;
-    bool inSheetData = false;
+    // ★ 遍历所有 Sheet，汇总行数
+    for (int sheetIdx = 1; ; ++sheetIdx) {
+        QString sheetPath = QStringLiteral("xl/worksheets/sheet%1.xml").arg(sheetIdx);
+        QByteArray sheetXml = zip.fileData(sheetPath.toUtf8());
+        if (sheetXml.isEmpty()) break;
 
-    while (!rd.atEnd()) {
-        rd.readNext();
-        if (rd.isStartElement()) {
-            if (rd.name() == QLatin1String("sheetData")) {
-                inSheetData = true;
-            } else if (inSheetData && rd.name() == QLatin1String("row")) {
-                ++rowCount;
-            }
-        } else if (rd.isEndElement()) {
-            if (rd.name() == QLatin1String("sheetData")) {
-                break;
+        QXmlStreamReader rd(sheetXml);
+        int rowCount = 0;
+        bool inSheetData = false;
+
+        while (!rd.atEnd()) {
+            rd.readNext();
+            if (rd.isStartElement()) {
+                if (rd.name() == QLatin1String("sheetData"))
+                    inSheetData = true;
+                else if (inSheetData && rd.name() == QLatin1String("row"))
+                    ++rowCount;
+            } else if (rd.isEndElement()) {
+                if (rd.name() == QLatin1String("sheetData"))
+                    break;
             }
         }
+
+        // 第一个 Sheet 有表头行，减去；后续 Sheet 没有表头行
+        if (sheetIdx == 1)
+            totalRows += qMax(0, rowCount - 1);
+        else
+            totalRows += qMax(0, rowCount);
     }
 
-    return qMax(0, rowCount - 1);
+    return totalRows;
 }
 
 QStringList ExcelEngine::getHeaders(const QString &filePath)
@@ -139,7 +148,6 @@ QList<OrderData> ExcelEngine::readExcel(const QString &filePath, const QMap<QStr
     }
 
     QStringList sharedStrings = load_shared_strings_all(zip);
-    QByteArray sheetXml = zip.fileData("xl/worksheets/sheet1.xml");
 
     int colWaybill = columnMapping.value("运单号", -1);
     int colTime = columnMapping.value("业务时间", -1);
@@ -161,116 +169,106 @@ QList<OrderData> ExcelEngine::readExcel(const QString &filePath, const QMap<QStr
     if (estRows > 0)
         allOrders.reserve(estRows + 100);
 
-    int currentRow = 0;
-    QVector<QVariant> currentRowData(maxCol);
-    QVector<bool> colSet(maxCol, false);
-
     int dataRowCount = 0;
     int progressInterval = qMax(1, estRows / 100);
-    bool firstRow = true;
-
-    auto processRow = [&]() {
-        if (currentRow <= 0 || firstRow) return;
-
-        OrderData order;
-        order.isValid = true;
-
-        if (colWaybill >= 0 && colSet[colWaybill]) {
-            order.waybillNo = currentRowData[colWaybill].toString().trimmed();
-        }
-        if (colTime >= 0 && colSet[colTime]) {
-            QVariant v = currentRowData[colTime];
-            QDate date;
-            if (v.userType() == QMetaType::QDate) {
-                date = v.toDate();
-            } else if (v.userType() == QMetaType::QDateTime) {
-                date = v.toDateTime().date();
-            } else {
-                QString s = v.toString().trimmed();
-                if (s.length() >= 10) {
-                    date = QDate::fromString(s.left(10), "yyyy-MM-dd");
-                    if (!date.isValid())
-                        date = QDate::fromString(s.left(10), "yyyy/M/d");
-                }
-            }
-            if (date.isValid())
-                order.businessTime = date;
-        }
-        if (colVol >= 0 && colSet[colVol]) {
-            bool ok;
-            double d = currentRowData[colVol].toDouble(&ok);
-            if (ok) order.volumetricWeight = d;
-        }
-        if (colCustomer >= 0 && colSet[colCustomer]) {
-            order.customer = currentRowData[colCustomer].toString().trimmed();
-        }
-        if (colClient >= 0 && colSet[colClient]) {
-            order.client = currentRowData[colClient].toString().trimmed();
-        }
-        if (colDest >= 0 && colSet[colDest]) {
-            order.destinationProvince = currentRowData[colDest].toString().trimmed();
-        }
-        if (colWeight >= 0 && colSet[colWeight]) {
-            bool ok;
-            double d = currentRowData[colWeight].toDouble(&ok);
-            if (ok) order.actualWeight = d;
-        }
-        if (colFreight >= 0 && colSet[colFreight]) {
-            bool ok;
-            double d = currentRowData[colFreight].toDouble(&ok);
-            if (ok) order.freight = d;
-        }
-        if (colUsedRule >= 0 && colSet[colUsedRule]) {
-            order.usedRule = currentRowData[colUsedRule].toString().trimmed();
-        }
-
-        // 过滤空行/无效行:
-        // 1. 运单号为空 且 实际重量为0 且 体积重为0 → 跳过
-        // 2. 运单号等于"运单号" → 重复表头行，跳过
-        bool isEmptyRow = order.waybillNo.isEmpty() && order.actualWeight <= 0 && order.volumetricWeight <= 0;
-        bool isDuplicateHeader = (order.waybillNo == QStringLiteral("运单号")) ||
-                                 (order.waybillNo.trimmed().compare(QStringLiteral("运单号"), Qt::CaseInsensitive) == 0);
-        if (isEmptyRow || isDuplicateHeader) {
-            return;
-        }
-
-        allOrders.append(order);
-        dataRowCount++;
-
-        if (dataRowCount % progressInterval == 0) {
-            int percent = estRows > 0 ? qMin(99, dataRowCount * 100 / estRows) : qMin(99, dataRowCount / 100);
-            emit progressUpdated(percent);
-        }
-    };
 
     sax_options opt;
     opt.resolve_shared_strings = true;
 
-    auto onCell = [&](const sax_cell& cell) -> bool {
-        int r = cell.row;
-        int c = cell.col - 1;
+    // ★ 遍历所有 Sheet (sheet1.xml, sheet2.xml, ...)
+    for (int sheetIdx = 1; ; ++sheetIdx) {
+        QString sheetPath = QStringLiteral("xl/worksheets/sheet%1.xml").arg(sheetIdx);
+        QByteArray sheetXml = zip.fileData(sheetPath.toUtf8());
+        if (sheetXml.isEmpty()) break;  // 没有更多 Sheet
 
-        if (r != currentRow) {
-            processRow();
-            firstRow = false;
-            currentRow = r;
-            for (int i = 0; i < maxCol; ++i) {
-                currentRowData[i] = QVariant();
-                colSet[i] = false;
+        int currentRow = 0;
+        QVector<QVariant> currentRowData(maxCol);
+        QVector<bool> colSet(maxCol, false);
+        bool isFirstSheet = (sheetIdx == 1);
+
+        auto processRow = [&]() {
+            if (currentRow <= 0) return;
+            // 跳过表头行：Sheet1 第1行始终跳过；其他 Sheet 第1行如果像表头也跳过
+            if (currentRow == 1) {
+                if (isFirstSheet) return;
+                // 检查是否像表头（包含"运单号"关键词）
+                if (colWaybill >= 0 && colSet[colWaybill]) {
+                    QString v = currentRowData[colWaybill].toString().trimmed();
+                    if (v == QStringLiteral("运单号") || v.contains(QStringLiteral("运单")))
+                        return;
+                }
             }
-        }
 
-        if (c >= 0 && c < maxCol) {
-            currentRowData[c] = cell.value;
-            colSet[c] = true;
-        }
+            OrderData order;
+            order.isValid = true;
 
-        return true;
-    };
+            if (colWaybill >= 0 && colSet[colWaybill])
+                order.waybillNo = currentRowData[colWaybill].toString().trimmed();
+            if (colTime >= 0 && colSet[colTime]) {
+                QVariant v = currentRowData[colTime];
+                QDate date;
+                if (v.userType() == QMetaType::QDate) date = v.toDate();
+                else if (v.userType() == QMetaType::QDateTime) date = v.toDateTime().date();
+                else {
+                    QString s = v.toString().trimmed();
+                    if (s.length() >= 10) {
+                        date = QDate::fromString(s.left(10), "yyyy-MM-dd");
+                        if (!date.isValid()) date = QDate::fromString(s.left(10), "yyyy/M/d");
+                    }
+                }
+                if (date.isValid()) order.businessTime = date;
+            }
+            if (colVol >= 0 && colSet[colVol]) {
+                bool ok; double d = currentRowData[colVol].toDouble(&ok);
+                if (ok) order.volumetricWeight = d;
+            }
+            if (colCustomer >= 0 && colSet[colCustomer])
+                order.customer = currentRowData[colCustomer].toString().trimmed();
+            if (colClient >= 0 && colSet[colClient])
+                order.client = currentRowData[colClient].toString().trimmed();
+            if (colDest >= 0 && colSet[colDest])
+                order.destinationProvince = currentRowData[colDest].toString().trimmed();
+            if (colWeight >= 0 && colSet[colWeight]) {
+                bool ok; double d = currentRowData[colWeight].toDouble(&ok);
+                if (ok) order.actualWeight = d;
+            }
+            if (colFreight >= 0 && colSet[colFreight]) {
+                bool ok; double d = currentRowData[colFreight].toDouble(&ok);
+                if (ok) order.freight = d;
+            }
+            if (colUsedRule >= 0 && colSet[colUsedRule])
+                order.usedRule = currentRowData[colUsedRule].toString().trimmed();
 
-    read_sheet_xml_sax(sheetXml, opt, &sharedStrings, onCell);
+            // 过滤空行/表头行
+            bool isEmptyRow = order.waybillNo.isEmpty() && order.actualWeight <= 0 && order.volumetricWeight <= 0;
+            bool isDupHeader = (order.waybillNo == QStringLiteral("运单号"))
+                            || (order.waybillNo.trimmed().compare(QStringLiteral("运单号"), Qt::CaseInsensitive) == 0);
+            if (isEmptyRow || isDupHeader) return;
 
-    processRow();
+            allOrders.append(order);
+            dataRowCount++;
+
+            if (dataRowCount % progressInterval == 0) {
+                int percent = estRows > 0 ? qMin(99, dataRowCount * 100 / estRows) : qMin(99, dataRowCount / 100);
+                emit progressUpdated(percent);
+            }
+        };
+
+        auto onCell = [&](const sax_cell& cell) -> bool {
+            int r = cell.row;
+            int c = cell.col - 1;
+            if (r != currentRow) {
+                processRow();
+                currentRow = r;
+                for (int i = 0; i < maxCol; ++i) { currentRowData[i] = QVariant(); colSet[i] = false; }
+            }
+            if (c >= 0 && c < maxCol) { currentRowData[c] = cell.value; colSet[c] = true; }
+            return true;
+        };
+
+        read_sheet_xml_sax(sheetXml, opt, &sharedStrings, onCell);
+        processRow();  // 处理最后一个 Sheet 的最后一行
+    }
 
     emit progressUpdated(100);
     return allOrders;

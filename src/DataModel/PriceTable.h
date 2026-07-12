@@ -41,6 +41,18 @@ inline QString increaseModeLabel(IncreaseMode mode) {
     return {};
 }
 
+// ★ 策略分派：加价模式 → 计算函数（消除所有 switch/case）
+using IncreaseFunc = double (*)(double freight, double weight, double amount);
+
+inline double incFixedPerTicket(double freight, double, double amount)    { return freight + amount; }
+inline double incPercentPerTicket(double freight, double, double amount)  { return freight * (1.0 + amount); }
+inline double incPerKg(double freight, double weight, double amount)      { return freight + weight * amount; }
+
+inline IncreaseFunc getIncreaseFunc(IncreaseMode mode) {
+    static const IncreaseFunc table[] = { incFixedPerTicket, incPercentPerTicket, incPerKg };
+    return table[static_cast<int>(mode)];
+}
+
 // ===================================================================
 // 统一加价规则 — 活动/临时/省份三种规则共用此结构
 // ===================================================================

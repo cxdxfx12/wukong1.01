@@ -27,6 +27,8 @@ public:
 
     double quickCalculate(double weight, const QString &province, const CustomerRule &rule, const QDate &time = QDate());
 
+    double calculateFreightDetail(const OrderData &order, const CustomerRule &rule, QString &outRuleDesc);
+
     void buildRuleCache(const CustomerRule &rule);
 
 signals:
@@ -47,8 +49,6 @@ private:
     PriceRule findPriceRule(const QString &province, const CustomerRule &rule);
 
     static QString normalizeProvince(const QString &province);
-
-    double calculateFreightDetail(const OrderData &order, const CustomerRule &rule, QString &outRuleDesc);
 };
 
 #endif // FREIGHTCALCULATOR_H

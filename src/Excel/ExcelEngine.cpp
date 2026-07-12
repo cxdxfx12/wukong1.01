@@ -249,7 +249,7 @@ QList<OrderData> ExcelEngine::readExcel(const QString &filePath, const QMap<QStr
             dataRowCount++;
 
             if (dataRowCount % progressInterval == 0) {
-                int percent = estRows > 0 ? qMin(99, dataRowCount * 100 / estRows) : qMin(99, dataRowCount / 100);
+                int percent = estRows > 0 ? (dataRowCount * 100 / estRows) : (dataRowCount / 100);
                 emit progressUpdated(percent);
             }
         };
@@ -272,6 +272,106 @@ QList<OrderData> ExcelEngine::readExcel(const QString &filePath, const QMap<QStr
 
     emit progressUpdated(100);
     return allOrders;
+}
+
+int ExcelEngine::sheetCount(const QString &filePath)
+{
+    if (!QFile::exists(filePath)) return 0;
+    ZipReader zip(filePath);
+    if (!zip.exists()) return 0;
+    int count = 0;
+    for (int i = 1; ; ++i) {
+        if (!zip.fileData(QStringLiteral("xl/worksheets/sheet%1.xml").arg(i).toUtf8()).isEmpty())
+            ++count;
+        else
+            break;
+    }
+    return count;
+}
+
+QList<OrderData> ExcelEngine::readSheet(const QString &filePath, int sheetIdx,
+                                          const QMap<QString, int> &columnMapping,
+                                          const QStringList *sharedStrings)
+{
+    QList<OrderData> orders;
+    ZipReader zip(filePath);
+    if (!zip.exists()) return orders;
+
+    QStringList ss;
+    const QStringList *pSS = sharedStrings;
+    if (!pSS) {
+        ss = load_shared_strings_all(zip);
+        pSS = &ss;
+    }
+
+    QByteArray sheetXml = zip.fileData(QStringLiteral("xl/worksheets/sheet%1.xml").arg(sheetIdx).toUtf8());
+    if (sheetXml.isEmpty()) return orders;
+
+    int colWaybill = columnMapping.value("运单号", -1);
+    int colTime = columnMapping.value("业务时间", -1);
+    int colVol = columnMapping.value("体积重", -1);
+    int colCustomer = columnMapping.value("订单客户", -1);
+    int colClient = columnMapping.value("客户", -1);
+    int colDest = columnMapping.value("目的省份", -1);
+    int colWeight = columnMapping.value("实际重量", -1);
+    int colFreight = columnMapping.value("运费", -1);
+    int colUsedRule = columnMapping.value("使用的规则", -1);
+
+    int maxCol = 0;
+    for (int v : {colWaybill, colTime, colVol, colCustomer, colClient, colDest, colWeight, colFreight, colUsedRule})
+        maxCol = qMax(maxCol, v);
+    maxCol += 2;
+
+    int currentRow = 0;
+    QVector<QVariant> currentRowData(maxCol);
+    QVector<bool> colSet(maxCol, false);
+    bool isFirstSheet = (sheetIdx == 1);
+
+    auto processRow = [&]() {
+        if (currentRow <= 0) return;
+        if (currentRow == 1) {
+            if (isFirstSheet) return;
+            if (colWaybill >= 0 && colSet[colWaybill]) {
+                QString v = currentRowData[colWaybill].toString().trimmed();
+                if (v == QStringLiteral("运单号") || v.contains(QStringLiteral("运单"))) return;
+            }
+        }
+        OrderData order;
+        order.isValid = true;
+        if (colWaybill >= 0 && colSet[colWaybill]) order.waybillNo = currentRowData[colWaybill].toString().trimmed();
+        if (colTime >= 0 && colSet[colTime]) {
+            QVariant v = currentRowData[colTime]; QDate date;
+            if (v.userType() == QMetaType::QDate) date = v.toDate();
+            else if (v.userType() == QMetaType::QDateTime) date = v.toDateTime().date();
+            else { QString s = v.toString().trimmed(); if (s.length() >= 10) { date = QDate::fromString(s.left(10), "yyyy-MM-dd"); if (!date.isValid()) date = QDate::fromString(s.left(10), "yyyy/M/d"); } }
+            if (date.isValid()) order.businessTime = date;
+        }
+        if (colVol >= 0 && colSet[colVol]) { bool ok; double d = currentRowData[colVol].toDouble(&ok); if (ok) order.volumetricWeight = d; }
+        if (colCustomer >= 0 && colSet[colCustomer]) order.customer = currentRowData[colCustomer].toString().trimmed();
+        if (colClient >= 0 && colSet[colClient]) order.client = currentRowData[colClient].toString().trimmed();
+        if (colDest >= 0 && colSet[colDest]) order.destinationProvince = currentRowData[colDest].toString().trimmed();
+        if (colWeight >= 0 && colSet[colWeight]) { bool ok; double d = currentRowData[colWeight].toDouble(&ok); if (ok) order.actualWeight = d; }
+        if (colFreight >= 0 && colSet[colFreight]) { bool ok; double d = currentRowData[colFreight].toDouble(&ok); if (ok) order.freight = d; }
+        if (colUsedRule >= 0 && colSet[colUsedRule]) order.usedRule = currentRowData[colUsedRule].toString().trimmed();
+        bool isEmptyRow = order.waybillNo.isEmpty() && order.actualWeight <= 0 && order.volumetricWeight <= 0;
+        bool isDupHeader = (order.waybillNo == QStringLiteral("运单号")) || (order.waybillNo.trimmed().compare(QStringLiteral("运单号"), Qt::CaseInsensitive) == 0);
+        if (isEmptyRow || isDupHeader) return;
+        orders.append(order);
+    };
+
+    sax_options opt;
+    opt.resolve_shared_strings = true;
+
+    auto onCell = [&](const sax_cell& cell) -> bool {
+        int r = cell.row, c = cell.col - 1;
+        if (r != currentRow) { processRow(); currentRow = r; for (int i = 0; i < maxCol; ++i) { currentRowData[i] = QVariant(); colSet[i] = false; } }
+        if (c >= 0 && c < maxCol) { currentRowData[c] = cell.value; colSet[c] = true; }
+        return true;
+    };
+
+    read_sheet_xml_sax(sheetXml, opt, pSS, onCell);
+    processRow();
+    return orders;
 }
 
 bool ExcelEngine::writeExcel(const QString &filePath, const QList<OrderData> &orders, const QStringList &headers)
@@ -512,7 +612,7 @@ bool ExcelEngine::writeExcelFast(const QString &filePath, const QList<OrderData>
                 int globalRow = startRow + (r - 1);
                 if (globalRow % progressInterval == 0) {
                     int percent = static_cast<int>(globalRow * 100.0 / totalOrders);
-                    emit progressUpdated(qMin(99, percent));
+                    emit progressUpdated(percent);
                 }
             }
         }

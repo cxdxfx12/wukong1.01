@@ -19,6 +19,8 @@
 #include <memory>
 #include <functional>
 #include <xlsxdocument.h>
+#include <xlsxzipreader_p.h>
+#include <xlsxreadsax.h>
 
 #include "Excel/ExcelEngine.h"
 #include "Excel/ExcelImporter.h"
@@ -775,85 +777,74 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
         try {
             int fileCount = filePaths.size();
 
-            QList<int> fileRowEstimates;
-            fileRowEstimates.resize(fileCount);
-            int total = 0;
-
-            QList<QFuture<void>> scanFutures;
+            // Single-file multi-sheet: enumerate (file, sheet) tasks for parallelism
+            struct Task { int fileIdx; int sheetIdx; int estRows; };
+            QList<Task> tasks;
             for (int i = 0; i < fileCount; ++i) {
-                scanFutures.append(QtConcurrent::run([&, i]() {
-                    ExcelEngine engine;
-                    fileRowEstimates[i] = qMax(0, engine.countRowsFast(filePaths[i]));
+                int sheets = ExcelEngine::sheetCount(filePaths[i]);
+                if (sheets <= 0) sheets = 1;
+                for (int s = 1; s <= sheets; ++s)
+                    tasks.append({i, s, 0});
+            }
+            QList<QFuture<void>> scanFutures;
+            for (int t = 0; t < tasks.size(); ++t) {
+                scanFutures.append(QtConcurrent::run([&, t]() {
+                    tasks[t].estRows = qMax(0, ExcelEngine().countRowsFast(filePaths[tasks[t].fileIdx]));
                 }));
             }
             for (auto &f : scanFutures) f.waitForFinished();
-
-            for (int v : fileRowEstimates) total += v;
+            int total = 0;
+            for (const Task &t : tasks) total += t.estRows;
             sharedTotalRows->storeRelease(total);
-
             if (total > 0) {
                 sharedOrders->reserve(total + 1000);
-
-                // ★ 辅助：安全上报进度（只增不减）
-                auto reportProgress = [&](int rawPercent) {
-                    int p = qBound(0, rawPercent, 99);
-                    int prev = sharedMaxProgress->loadAcquire();
-                    // CAS 循环：只有新值 > 旧值才更新并上报
-                    while (p > prev) {
-                        if (sharedMaxProgress->testAndSetOrdered(prev, p)) {
-                            if (self) self->importProgress(p);
-                            break;
-                        }
-                        prev = sharedMaxProgress->loadAcquire();
-                    }
-                };
-
-                QList<QFuture<void>> importFutures;
+                QMap<int, QStringList> fileSS;
                 for (int i = 0; i < fileCount; ++i) {
-                    importFutures.append(QtConcurrent::run([&, i, reportProgress]() {
-                        ExcelImporter importer;
-                        int estimate = fileRowEstimates[i];
-
-                        QObject::connect(&importer, &ExcelImporter::progressUpdated, self.data(),
-                            [&reportProgress, &sharedProcessedRows, &sharedTotalRows, estimate](int filePercent) {
-                                int localDone = static_cast<int>(filePercent / 100.0 * estimate);
-                                int globalDone = sharedProcessedRows->loadAcquire() + localDone;
-                                int total = sharedTotalRows->loadAcquire();
-                                if (total > 0)
-                                    reportProgress(static_cast<int>(globalDone * 100.0 / total));
-                            }, Qt::QueuedConnection);
-
-                        QList<OrderData> orders = importer.importFromFile(filePaths[i], columnMapping);
-
+                    QXlsx::ZipReader zip(filePaths[i]);
+                    if (zip.exists()) fileSS[i] = QXlsx::load_shared_strings_all(zip);
+                }
+                QList<QFuture<void>> importFutures;
+                for (int t = 0; t < tasks.size(); ++t) {
+                    importFutures.append(QtConcurrent::run([&, t, fileSS]() {
+                        ExcelEngine engine;
+                        const QStringList &ssRef = fileSS[tasks[t].fileIdx]; const QStringList *ss = &ssRef;
+                        QList<OrderData> orders = engine.readSheet(
+                            filePaths[tasks[t].fileIdx], tasks[t].sheetIdx, columnMapping, ss);
                         QMutexLocker locker(sharedMutex.get());
                         sharedOrders->append(orders);
                         sharedProcessedRows->fetchAndAddOrdered(orders.size());
-
                         int done = sharedProcessedRows->loadAcquire();
-                        int total = sharedTotalRows->loadAcquire();
-                        if (total > 0) {
-                            reportProgress(static_cast<int>(done * 100.0 / total));
+                        int tot = sharedTotalRows->loadAcquire();
+                        if (tot > 0) {
+                            int pct = static_cast<int>(done * 100.0 / tot);
+                            int prev = sharedMaxProgress->loadAcquire();
+                            while (pct > prev && !sharedMaxProgress->testAndSetOrdered(prev, pct))
+                                prev = sharedMaxProgress->loadAcquire();
+                            if (pct > prev && self) self->importProgress(pct);
                         }
                     }));
                 }
 
-                for (auto &f : importFutures) f.waitForFinished();
 
                 // ★ 运单号自动去重（运单号全局唯一，保留首次出现）
                 if (!sharedOrders->isEmpty()) {
-                    QSet<QString> seen;
+                    QMetaObject::invokeMethod(self.data(), [self]() {
+                        if (self) self->m_centerProgressLabel->setText(QStringLiteral("正在去重..."));
+                    }, Qt::QueuedConnection);
                     int before = sharedOrders->size();
-                    auto it = sharedOrders->begin();
-                    while (it != sharedOrders->end()) {
-                        if (it->waybillNo.isEmpty() || seen.contains(it->waybillNo)) {
-                            it = sharedOrders->erase(it);
-                        } else {
-                            seen.insert(it->waybillNo);
-                            ++it;
+                    // O(n) 一次性过滤：seen + 新建列表，避免 erase() 的 O(n²) 移动
+                    QSet<QString> seen;
+                    seen.reserve(before);
+                    QList<OrderData> unique;
+                    unique.reserve(before);
+                    for (const OrderData &order : *sharedOrders) {
+                        if (!order.waybillNo.isEmpty() && !seen.contains(order.waybillNo)) {
+                            seen.insert(order.waybillNo);
+                            unique.append(order);
                         }
                     }
+                    *sharedOrders = std::move(unique);
                     sharedTotalRows->storeRelease(sharedOrders->size());
-                    // 记录去重数量，传给回调
                     int dupCount = before - sharedOrders->size();
                     QMetaObject::invokeMethod(self.data(), [self, dupCount]() {
                         if (self) self->m_lastDedupCount = dupCount;
@@ -1126,7 +1117,7 @@ void MainWindow::onCalculateClicked()
                         prevPct = lastPercent.loadAcquire();
                     if (percent > prevPct || done == totalCount) {
                         if (self) {
-                            self->calcProgress(qMin(99, percent));
+                            self->calcProgress(percent);
                         }
                     }
                 }));

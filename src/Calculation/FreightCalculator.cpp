@@ -80,7 +80,21 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
         QDateTime bizDt(order.businessTime, QTime(0, 0));
         result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.activityRules, bizDt);
         result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.tempPriceIncreases, bizDt);
-        result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.provincePriceIncreases);
+        // 省份加价 — 无重量时也要匹配省份
+        QString np = normalizeProvince(order.destinationProvince);
+        for (const PriceIncreaseRule &ppi : m_globalRules.provincePriceIncreases) {
+            if (!ppi.isActive) continue;
+            QString rp = normalizeProvince(ppi.province);
+            if (rp == np || ppi.province == order.destinationProvince
+                || np.contains(rp) || rp.contains(np)
+                || (np.size() >= 2 && rp.size() >= 2 && np.left(2) == rp.left(2))) {
+                switch (ppi.mode) {
+                case IncreaseMode::PerTicketFixed:   result += ppi.amount; break;
+                case IncreaseMode::PerTicketPercent: result *= (1.0 + ppi.amount); break;
+                case IncreaseMode::PerKg:            break;  // 无重量，PerKg无效
+                }
+            }
+        }
         result = std::round(result * 100.0) / 100.0;
         outRuleDesc = QStringLiteral("无重量默认价");
         return result;
@@ -151,12 +165,21 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
     }
     freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.tempPriceIncreases, bizTime);
 
-    // 省份加价
-    freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.provincePriceIncreases);
+    // 省份加价 — 仅匹配当前订单省份
+    QString normOrderProv = normalizeProvince(order.destinationProvince);
     for (const PriceIncreaseRule &ppi : m_globalRules.provincePriceIncreases) {
-        if (ppi.isActive) {
+        if (!ppi.isActive) continue;
+        QString ruleProv = normalizeProvince(ppi.province);
+        // 三重匹配：精确 > contains > 两字前缀
+        if (ruleProv == normOrderProv || ppi.province == order.destinationProvince
+            || normOrderProv.contains(ruleProv) || ruleProv.contains(normOrderProv)
+            || (normOrderProv.size() >= 2 && ruleProv.size() >= 2 && normOrderProv.left(2) == ruleProv.left(2))) {
             ruleDesc += QStringLiteral("+省份加价");
-            break;  // 描述只写一次
+            switch (ppi.mode) {
+            case IncreaseMode::PerTicketFixed:   freight += ppi.amount; break;
+            case IncreaseMode::PerTicketPercent: freight *= (1.0 + ppi.amount); break;
+            case IncreaseMode::PerKg:            freight += effectiveWeight * ppi.amount; break;
+            }
         }
     }
 

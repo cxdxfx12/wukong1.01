@@ -871,57 +871,48 @@ int SimdCalculator::calculateChunk(
 
         // 活动加价
         QDateTime bizTime = QDateTime(orders[i].businessTime, QTime(0, 0));
-        for (const ActivityRule &ar : globalRules.activityRules) {
-            if (ar.isInRange(bizTime)) {
+        for (const PriceIncreaseRule &ar : globalRules.activityRules) {
+            if (ar.isTimeInRange(bizTime)) {
                 ruleDesc += QStringLiteral("+%1").arg(ar.name.isEmpty() ? QStringLiteral("活动加价") : ar.name);
-                if (ar.isFixedAmount) {
-                    freight += ar.increaseAmount;
-                } else {
-                    freight *= (1.0 + ar.increaseRate);
+                switch (ar.mode) {
+                case IncreaseMode::PerTicketFixed:   freight += ar.amount; break;
+                case IncreaseMode::PerTicketPercent: freight *= (1.0 + ar.amount); break;
+                case IncreaseMode::PerKg:            freight += effWeights[i] * ar.amount; break;
                 }
             }
         }
 
         // 临时加价
-        for (const TempPriceIncrease &tpi : globalRules.tempPriceIncreases) {
-            if (tpi.isInRange(bizTime)) {
+        for (const PriceIncreaseRule &tpi : globalRules.tempPriceIncreases) {
+            if (tpi.isTimeInRange(bizTime)) {
                 ruleDesc += QStringLiteral("+%1").arg(tpi.name.isEmpty() ? QStringLiteral("临时加价") : tpi.name);
-                if (tpi.isFixedAmount) {
-                    freight += tpi.increaseAmount;
-                } else {
-                    freight *= (1.0 + tpi.increaseRate);
+                switch (tpi.mode) {
+                case IncreaseMode::PerTicketFixed:   freight += tpi.amount; break;
+                case IncreaseMode::PerTicketPercent: freight *= (1.0 + tpi.amount); break;
+                case IncreaseMode::PerKg:            freight += effWeights[i] * tpi.amount; break;
                 }
             }
         }
 
-        // 省份加价（规范化匹配）
-        static const QStringList provSuffixes = {
-            QStringLiteral("省"), QStringLiteral("市"),
-            QStringLiteral("自治区"), QStringLiteral("特别行政区")
+        // 省份加价 — 模糊匹配
+        auto normProv = [](QString p) -> QString {
+            static const QStringList sf = {QStringLiteral("省"),QStringLiteral("市"),QStringLiteral("自治区"),QStringLiteral("特别行政区")};
+            for (const QString &s : sf) { if (p.endsWith(s)) { p.chop(s.size()); break; } }
+            return p.trimmed();
         };
-        QString normOrderProv = orders[i].destinationProvince;
-        for (const QString &sf : provSuffixes) {
-            if (normOrderProv.endsWith(sf)) {
-                normOrderProv.chop(sf.size());
-                break;
-            }
-        }
-        normOrderProv = normOrderProv.trimmed();
-
-        for (const ProvincePriceIncrease &ppi : globalRules.provincePriceIncreases) {
+        QString np = normProv(orders[i].destinationProvince);
+        for (const PriceIncreaseRule &ppi : globalRules.provincePriceIncreases) {
             if (!ppi.isActive) continue;
-            QString ruleProv = ppi.province;
-            for (const QString &sf : provSuffixes) {
-                if (ruleProv.endsWith(sf)) {
-                    ruleProv.chop(sf.size());
-                    break;
-                }
-            }
-            ruleProv = ruleProv.trimmed();
-            if (ruleProv == normOrderProv || ppi.province == orders[i].destinationProvince) {
+            QString rp = normProv(ppi.province);
+            if (rp == np || ppi.province == orders[i].destinationProvince
+                || np.contains(rp) || rp.contains(np)
+                || (np.size() >= 2 && rp.size() >= 2 && np.left(2) == rp.left(2))) {
                 ruleDesc += QStringLiteral("+省份加价");
-                freight += ppi.increaseAmount;
-                // 不 break：与标量路径 applyProvincePriceIncrease 一致，允许多条省份加价规则叠加
+                switch (ppi.mode) {
+                case IncreaseMode::PerTicketFixed:   freight += ppi.amount; break;
+                case IncreaseMode::PerTicketPercent: freight *= (1.0 + ppi.amount); break;
+                case IncreaseMode::PerKg:            freight += effWeights[i] * ppi.amount; break;
+                }
             }
         }
 

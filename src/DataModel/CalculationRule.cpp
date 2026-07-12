@@ -155,63 +155,45 @@ double CalculationRule::calculateFullAdditional(double weight, const QList<Weigh
     return result;
 }
 
-double CalculationRule::applyActivityPriceIncrease(double freight, const QList<ActivityRule> &rules, const QDate &date) {
+double CalculationRule::applyPriceIncreases(double freight, double weight,
+                                              const QList<PriceIncreaseRule> &rules)
+{
     double result = freight;
-    QDateTime time = QDateTime(date, QTime(0, 0));
-    for (const ActivityRule &rule : rules) {
-        if (rule.isInRange(time)) {
-            if (rule.isFixedAmount) {
-                result += rule.increaseAmount;
-            } else {
-                result *= (1.0 + rule.increaseRate);
-            }
-        }
-    }
-    return result;
-}
-
-double CalculationRule::applyTempPriceIncrease(double freight, const QList<TempPriceIncrease> &rules, const QDate &date) {
-    double result = freight;
-    QDateTime time = QDateTime(date, QTime(0, 0));
-    for (const TempPriceIncrease &rule : rules) {
-        if (rule.isInRange(time)) {
-            if (rule.isFixedAmount) {
-                result += rule.increaseAmount;
-            } else {
-                result *= (1.0 + rule.increaseRate);
-            }
-        }
-    }
-    return result;
-}
-
-double CalculationRule::applyProvincePriceIncrease(double freight, const QList<ProvincePriceIncrease> &rules, const QString &province) {
-    double result = freight;
-    QString normalized = province;
-    static const QStringList suffixes = {
-        QStringLiteral("省"), QStringLiteral("市"),
-        QStringLiteral("自治区"), QStringLiteral("特别行政区")
-    };
-    for (const QString &sf : suffixes) {
-        if (normalized.endsWith(sf)) {
-            normalized.chop(sf.size());
+    for (const PriceIncreaseRule &rule : rules) {
+        if (!rule.isActive) continue;
+        switch (rule.mode) {
+        case IncreaseMode::PerTicketFixed:
+            result += rule.amount;
+            break;
+        case IncreaseMode::PerTicketPercent:
+            result *= (1.0 + rule.amount);
+            break;
+        case IncreaseMode::PerKg:
+            result += weight * rule.amount;
             break;
         }
     }
-    normalized = normalized.trimmed();
+    return result;
+}
 
-    for (const ProvincePriceIncrease &rule : rules) {
+double CalculationRule::applyPriceIncreases(double freight, double weight,
+                                              const QList<PriceIncreaseRule> &rules,
+                                              const QDateTime &timeFilter)
+{
+    double result = freight;
+    for (const PriceIncreaseRule &rule : rules) {
         if (!rule.isActive) continue;
-        QString ruleProv = rule.province;
-        for (const QString &sf : suffixes) {
-            if (ruleProv.endsWith(sf)) {
-                ruleProv.chop(sf.size());
-                break;
-            }
-        }
-        ruleProv = ruleProv.trimmed();
-        if (ruleProv == normalized || rule.province == province) {
-            result += rule.increaseAmount;
+        if (!rule.isTimeInRange(timeFilter)) continue;
+        switch (rule.mode) {
+        case IncreaseMode::PerTicketFixed:
+            result += rule.amount;
+            break;
+        case IncreaseMode::PerTicketPercent:
+            result *= (1.0 + rule.amount);
+            break;
+        case IncreaseMode::PerKg:
+            result += weight * rule.amount;
+            break;
         }
     }
     return result;

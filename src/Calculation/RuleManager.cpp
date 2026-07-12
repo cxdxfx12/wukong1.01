@@ -94,18 +94,18 @@ void RuleManager::setGlobalRules(const GlobalRules &rules)
     emit rulesChanged();
 }
 
-QList<ActivityRule> RuleManager::activityRules() const
+QList<PriceIncreaseRule> RuleManager::activityRules() const
 {
     return m_globalRules.activityRules;
 }
 
-void RuleManager::setActivityRules(const QList<ActivityRule> &rules)
+void RuleManager::setActivityRules(const QList<PriceIncreaseRule> &rules)
 {
     m_globalRules.activityRules = rules;
     emit rulesChanged();
 }
 
-void RuleManager::addActivityRule(const ActivityRule &rule)
+void RuleManager::addActivityRule(const PriceIncreaseRule &rule)
 {
     m_globalRules.activityRules.append(rule);
     emit rulesChanged();
@@ -119,18 +119,18 @@ void RuleManager::removeActivityRule(int index)
     }
 }
 
-QList<TempPriceIncrease> RuleManager::tempPriceIncreases() const
+QList<PriceIncreaseRule> RuleManager::tempPriceIncreases() const
 {
     return m_globalRules.tempPriceIncreases;
 }
 
-void RuleManager::setTempPriceIncreases(const QList<TempPriceIncrease> &rules)
+void RuleManager::setTempPriceIncreases(const QList<PriceIncreaseRule> &rules)
 {
     m_globalRules.tempPriceIncreases = rules;
     emit rulesChanged();
 }
 
-void RuleManager::addTempPriceIncrease(const TempPriceIncrease &rule)
+void RuleManager::addTempPriceIncrease(const PriceIncreaseRule &rule)
 {
     m_globalRules.tempPriceIncreases.append(rule);
     emit rulesChanged();
@@ -144,18 +144,18 @@ void RuleManager::removeTempPriceIncrease(int index)
     }
 }
 
-QList<ProvincePriceIncrease> RuleManager::provincePriceIncreases() const
+QList<PriceIncreaseRule> RuleManager::provincePriceIncreases() const
 {
     return m_globalRules.provincePriceIncreases;
 }
 
-void RuleManager::setProvincePriceIncreases(const QList<ProvincePriceIncrease> &rules)
+void RuleManager::setProvincePriceIncreases(const QList<PriceIncreaseRule> &rules)
 {
     m_globalRules.provincePriceIncreases = rules;
     emit rulesChanged();
 }
 
-void RuleManager::addProvincePriceIncrease(const ProvincePriceIncrease &rule)
+void RuleManager::addProvincePriceIncrease(const PriceIncreaseRule &rule)
 {
     m_globalRules.provincePriceIncreases.append(rule);
     emit rulesChanged();
@@ -446,91 +446,47 @@ PriceRule priceRuleFromJson(const QJsonObject &obj)
     }
     return rule;
 }
-
-QJsonObject activityRuleToJson(const ActivityRule &rule)
+// unified price-increase JSON
+QJsonObject ruleToJson(const PriceIncreaseRule &rule)
 {
     QJsonObject obj;
     obj[QStringLiteral("name")] = rule.name;
-    obj[QStringLiteral("startTime")] = rule.startTime.toString(Qt::ISODate);
-    obj[QStringLiteral("endTime")] = rule.endTime.toString(Qt::ISODate);
-    obj[QStringLiteral("increaseRate")] = rule.increaseRate;
-    obj[QStringLiteral("increaseAmount")] = rule.increaseAmount;
-    obj[QStringLiteral("isFixedAmount")] = rule.isFixedAmount;
+    obj[QStringLiteral("mode")] = static_cast<int>(rule.mode);
+    obj[QStringLiteral("amount")] = rule.amount;
+    if (rule.startTime.isValid())
+        obj[QStringLiteral("startTime")] = rule.startTime.toString(Qt::ISODate);
+    if (rule.endTime.isValid())
+        obj[QStringLiteral("endTime")] = rule.endTime.toString(Qt::ISODate);
+    if (!rule.province.isEmpty())
+        obj[QStringLiteral("province")] = rule.province;
     obj[QStringLiteral("isActive")] = rule.isActive;
     return obj;
 }
 
-ActivityRule activityRuleFromJson(const QJsonObject &obj)
+PriceIncreaseRule ruleFromJson(const QJsonObject &obj)
 {
-    ActivityRule rule;
+    PriceIncreaseRule rule;
     rule.name = obj[QStringLiteral("name")].toString();
-    rule.startTime = QDateTime::fromString(obj[QStringLiteral("startTime")].toString(), Qt::ISODate);
-    rule.endTime = QDateTime::fromString(obj[QStringLiteral("endTime")].toString(), Qt::ISODate);
-    rule.isActive = obj[QStringLiteral("isActive")].toBool(true);
-
-    if (obj.contains(QStringLiteral("increaseRate"))) {
-        rule.increaseRate = obj[QStringLiteral("increaseRate")].toDouble(0.0);
-        rule.increaseAmount = obj[QStringLiteral("increaseAmount")].toDouble(0.0);
-        rule.isFixedAmount = obj[QStringLiteral("isFixedAmount")].toBool(false);
-    } else if (obj.contains(QStringLiteral("discountRate"))) {
-        double discountRate = obj[QStringLiteral("discountRate")].toDouble(1.0);
-        if (discountRate > 0 && discountRate != 1.0) {
-            rule.increaseRate = discountRate - 1.0;
-        } else {
-            rule.increaseRate = 0.0;
-        }
-        rule.increaseAmount = 0.0;
-        rule.isFixedAmount = false;
-        if (obj[QStringLiteral("isFixedDiscount")].toBool(false)) {
-            rule.increaseAmount = obj[QStringLiteral("fixedDiscount")].toDouble(0.0);
-            rule.isFixedAmount = true;
-            rule.increaseRate = 0.0;
-        }
-    }
-    return rule;
-}
-
-QJsonObject tempPriceIncreaseToJson(const TempPriceIncrease &rule)
-{
-    QJsonObject obj;
-    obj[QStringLiteral("name")] = rule.name;
-    obj[QStringLiteral("startTime")] = rule.startTime.toString(Qt::ISODate);
-    obj[QStringLiteral("endTime")] = rule.endTime.toString(Qt::ISODate);
-    obj[QStringLiteral("increaseAmount")] = rule.increaseAmount;
-    obj[QStringLiteral("increaseRate")] = rule.increaseRate;
-    obj[QStringLiteral("isFixedAmount")] = rule.isFixedAmount;
-    obj[QStringLiteral("isActive")] = rule.isActive;
-    return obj;
-}
-
-TempPriceIncrease tempPriceIncreaseFromJson(const QJsonObject &obj)
-{
-    TempPriceIncrease rule;
-    rule.name = obj[QStringLiteral("name")].toString();
-    rule.startTime = QDateTime::fromString(obj[QStringLiteral("startTime")].toString(), Qt::ISODate);
-    rule.endTime = QDateTime::fromString(obj[QStringLiteral("endTime")].toString(), Qt::ISODate);
-    rule.increaseAmount = obj[QStringLiteral("increaseAmount")].toDouble(0);
-    rule.increaseRate = obj[QStringLiteral("increaseRate")].toDouble(0);
-    rule.isFixedAmount = obj[QStringLiteral("isFixedAmount")].toBool(true);
-    rule.isActive = obj[QStringLiteral("isActive")].toBool(true);
-    return rule;
-}
-
-QJsonObject provincePriceIncreaseToJson(const ProvincePriceIncrease &rule)
-{
-    QJsonObject obj;
-    obj[QStringLiteral("province")] = rule.province;
-    obj[QStringLiteral("increaseAmount")] = rule.increaseAmount;
-    obj[QStringLiteral("isActive")] = rule.isActive;
-    return obj;
-}
-
-ProvincePriceIncrease provincePriceIncreaseFromJson(const QJsonObject &obj)
-{
-    ProvincePriceIncrease rule;
     rule.province = obj[QStringLiteral("province")].toString();
-    rule.increaseAmount = obj[QStringLiteral("increaseAmount")].toDouble(0);
     rule.isActive = obj[QStringLiteral("isActive")].toBool(true);
+    rule.startTime = QDateTime::fromString(obj[QStringLiteral("startTime")].toString(), Qt::ISODate);
+    rule.endTime = QDateTime::fromString(obj[QStringLiteral("endTime")].toString(), Qt::ISODate);
+    if (obj.contains(QStringLiteral("mode"))) {
+        rule.mode = static_cast<IncreaseMode>(obj[QStringLiteral("mode")].toInt(0));
+        rule.amount = obj[QStringLiteral("amount")].toDouble(0.0);
+    } else if (obj.contains(QStringLiteral("isFixedAmount"))) {
+        bool isFixed = obj[QStringLiteral("isFixedAmount")].toBool();
+        rule.mode = isFixed ? IncreaseMode::PerTicketFixed : IncreaseMode::PerTicketPercent;
+        rule.amount = isFixed ? obj[QStringLiteral("increaseAmount")].toDouble(0.0)
+                              : obj[QStringLiteral("increaseRate")].toDouble(0.0);
+    } else if (obj.contains(QStringLiteral("discountRate"))) {
+        rule.mode = IncreaseMode::PerTicketPercent;
+        double dr = obj[QStringLiteral("discountRate")].toDouble(1.0);
+        rule.amount = (dr > 0 && dr != 1.0) ? (dr - 1.0) : 0.0;
+    } else if (obj.contains(QStringLiteral("increaseAmount"))) {
+        rule.mode = IncreaseMode::PerTicketFixed;
+        rule.amount = obj[QStringLiteral("increaseAmount")].toDouble(0.0);
+    }
     return rule;
 }
 
@@ -575,20 +531,20 @@ QJsonObject globalRulesToJson(const GlobalRules &rules)
     obj[QStringLiteral("noWeightDefaultPrice")] = rules.noWeightDefaultPrice;
 
     QJsonArray activityArr;
-    for (const ActivityRule &ar : rules.activityRules) {
-        activityArr.append(activityRuleToJson(ar));
+    for (const PriceIncreaseRule &ar : rules.activityRules) {
+        activityArr.append(ruleToJson(ar));
     }
     obj[QStringLiteral("activityRules")] = activityArr;
 
     QJsonArray tempArr;
-    for (const TempPriceIncrease &tr : rules.tempPriceIncreases) {
-        tempArr.append(tempPriceIncreaseToJson(tr));
+    for (const PriceIncreaseRule &tr : rules.tempPriceIncreases) {
+        tempArr.append(ruleToJson(tr));
     }
     obj[QStringLiteral("tempPriceIncreases")] = tempArr;
 
     QJsonArray provArr;
-    for (const ProvincePriceIncrease &pr : rules.provincePriceIncreases) {
-        provArr.append(provincePriceIncreaseToJson(pr));
+    for (const PriceIncreaseRule &pr : rules.provincePriceIncreases) {
+        provArr.append(ruleToJson(pr));
     }
     obj[QStringLiteral("provincePriceIncreases")] = provArr;
 
@@ -608,17 +564,17 @@ GlobalRules globalRulesFromJson(const QJsonObject &obj)
 
     QJsonArray activityArr = obj[QStringLiteral("activityRules")].toArray();
     for (const QJsonValue &val : activityArr) {
-        rules.activityRules.append(activityRuleFromJson(val.toObject()));
+        rules.activityRules.append(ruleFromJson(val.toObject()));
     }
 
     QJsonArray tempArr = obj[QStringLiteral("tempPriceIncreases")].toArray();
     for (const QJsonValue &val : tempArr) {
-        rules.tempPriceIncreases.append(tempPriceIncreaseFromJson(val.toObject()));
+        rules.tempPriceIncreases.append(ruleFromJson(val.toObject()));
     }
 
     QJsonArray provArr = obj[QStringLiteral("provincePriceIncreases")].toArray();
     for (const QJsonValue &val : provArr) {
-        rules.provincePriceIncreases.append(provincePriceIncreaseFromJson(val.toObject()));
+        rules.provincePriceIncreases.append(ruleFromJson(val.toObject()));
     }
 
     // 拉均重配置

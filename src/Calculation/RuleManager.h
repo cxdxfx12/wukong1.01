@@ -35,22 +35,20 @@ public:
     GlobalRules globalRules() const;
     void setGlobalRules(const GlobalRules &rules);
 
-    // 全局活动规则
-    QList<ActivityRule> activityRules() const;
-    void setActivityRules(const QList<ActivityRule> &rules);
-    void addActivityRule(const ActivityRule &rule);
+    // 全局加价规则 — 统一类型
+    QList<PriceIncreaseRule> activityRules() const;
+    void setActivityRules(const QList<PriceIncreaseRule> &rules);
+    void addActivityRule(const PriceIncreaseRule &rule);
     void removeActivityRule(int index);
 
-    // 全局临时加价规则
-    QList<TempPriceIncrease> tempPriceIncreases() const;
-    void setTempPriceIncreases(const QList<TempPriceIncrease> &rules);
-    void addTempPriceIncrease(const TempPriceIncrease &rule);
+    QList<PriceIncreaseRule> tempPriceIncreases() const;
+    void setTempPriceIncreases(const QList<PriceIncreaseRule> &rules);
+    void addTempPriceIncrease(const PriceIncreaseRule &rule);
     void removeTempPriceIncrease(int index);
 
-    // 全局省份加价规则
-    QList<ProvincePriceIncrease> provincePriceIncreases() const;
-    void setProvincePriceIncreases(const QList<ProvincePriceIncrease> &rules);
-    void addProvincePriceIncrease(const ProvincePriceIncrease &rule);
+    QList<PriceIncreaseRule> provincePriceIncreases() const;
+    void setProvincePriceIncreases(const QList<PriceIncreaseRule> &rules);
+    void addProvincePriceIncrease(const PriceIncreaseRule &rule);
     void removeProvincePriceIncrease(int index);
 
     // 无重量默认价格

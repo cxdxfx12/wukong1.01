@@ -47,14 +47,14 @@ public:
     // 最低收费取匹配段及之前所有段的最大首重价
     static double calculateFullAdditional(double weight, const QList<WeightSegment> &segments);
 
-    // 应用活动加价规则
-    static double applyActivityPriceIncrease(double freight, const QList<ActivityRule> &rules, const QDate &date);
-
-    // 应用临时加价规则
-    static double applyTempPriceIncrease(double freight, const QList<TempPriceIncrease> &rules, const QDate &date);
-
-    // 应用省份加价规则
-    static double applyProvincePriceIncrease(double freight, const QList<ProvincePriceIncrease> &rules, const QString &province);
+    // ★ 统一加价函数：遍历规则列表，按规则自身的 mode 执行加价
+    // weight 用于 PerKg 模式；timeFilter 非空时只应用 isTimeInRange 的规则（活动/临时）
+    static double applyPriceIncreases(double freight, double weight,
+                                       const QList<PriceIncreaseRule> &rules);
+    // timeFilter 版本：只应用时间范围内的规则
+    static double applyPriceIncreases(double freight, double weight,
+                                       const QList<PriceIncreaseRule> &rules,
+                                       const QDateTime &timeFilter);
 };
 
 #endif // CALCULATIONRULE_H

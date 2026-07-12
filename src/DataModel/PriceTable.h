@@ -23,57 +23,58 @@ struct PriceRule {
     QList<WeightSegment> segments;  // 重量段列表
 };
 
-// 活动加价规则
-struct ActivityRule {
-    QString name;                   // 活动名称
-    QDateTime startTime;            // 活动开始时间
-    QDateTime endTime;              // 活动结束时间
-    double increaseRate = 0.0;      // 加价比例 (0.1 = 加10%, 0 = 不加价)
-    double increaseAmount = 0.0;    // 固定加价金额 (元)
-    bool isFixedAmount = false;     // true=固定金额, false=比例
-    bool isActive = true;           // 是否启用
-
-    bool isInRange(const QDateTime &time) const {
-        return isActive && time >= startTime && time <= endTime;
-    }
+// ===================================================================
+// 加价模式枚举 — 三种计费方式
+// ===================================================================
+enum class IncreaseMode {
+    PerTicketFixed,   // 单票固定加价：每票 +X 元（不受重量影响）
+    PerTicketPercent, // 单票加百分比：运费 × (1 + X%)，如 0.1 = +10%
+    PerKg             // 每KG加价：运费 + 重量(kg) × X元
 };
 
-// 临时加价规则
-struct TempPriceIncrease {
+inline QString increaseModeLabel(IncreaseMode mode) {
+    switch (mode) {
+    case IncreaseMode::PerTicketFixed:   return QStringLiteral("单票固定加价");
+    case IncreaseMode::PerTicketPercent: return QStringLiteral("单票加百分比");
+    case IncreaseMode::PerKg:            return QStringLiteral("每KG加价");
+    }
+    return {};
+}
+
+// ===================================================================
+// 统一加价规则 — 活动/临时/省份三种规则共用此结构
+// ===================================================================
+struct PriceIncreaseRule {
     QString name;                   // 规则名称
-    QDateTime startTime;            // 加价开始时间
-    QDateTime endTime;              // 加价结束时间
-    double increaseAmount = 0;      // 固定加价金额 (元)
-    double increaseRate = 0;        // 加价比例 (0.1 = 加10%)
-    bool isFixedAmount = true;      // true=固定金额, false=比例
-    bool isActive = true;           // 是否启用
+    IncreaseMode mode = IncreaseMode::PerTicketFixed;  // 加价模式
+    double amount = 0.0;           // 加价数值（固定=元，百分比=小数如0.1即10%，每KG=元/kg）
+    QDateTime startTime;           // 生效开始（活动/临时规则使用）
+    QDateTime endTime;             // 生效结束（活动/临时规则使用）
+    QString province;              // 目标省份（省份加价规则使用）
+    bool isActive = true;          // 是否启用
 
-    bool isInRange(const QDateTime &time) const {
+    /// 判断当前时间是否在规则生效范围内（活动/临时规则用）
+    bool isTimeInRange(const QDateTime &time) const {
         return isActive && time >= startTime && time <= endTime;
     }
 };
 
-// 按省份加价规则
-struct ProvincePriceIncrease {
-    QString province;               // 省份
-    double increaseAmount = 0;      // 加价金额 (元)
-    bool isActive = true;           // 是否启用
-};
-
+// ===================================================================
 // 全局规则（对所有客户生效）
+// ===================================================================
 struct GlobalRules {
-    double noWeightDefaultPrice = 0;                    // 无重量默认价格 (元)
-    QList<ActivityRule> activityRules;                  // 活动规则列表
-    QList<TempPriceIncrease> tempPriceIncreases;        // 临时加价规则列表
-    QList<ProvincePriceIncrease> provincePriceIncreases;// 按省份加价规则
+    double noWeightDefaultPrice = 0;                          // 无重量默认价格 (元)
+    QList<PriceIncreaseRule> activityRules;                   // 活动加价规则列表
+    QList<PriceIncreaseRule> tempPriceIncreases;              // 临时加价规则列表
+    QList<PriceIncreaseRule> provincePriceIncreases;          // 按省份加价规则列表
 
     // 拉均重模式加价配置
-    double avgWeightBase = 0.5;          // 基准重量(kg)，平均重量超过此值开始加价
-    double avgWeightUpperLimit = 1.0;    // 上限重量(kg)，超过上限按上限计算
-    double avgWeightIncrement = 0.1;     // 递增步长(kg)，每超过此值加一次价
+    double avgWeightBase = 0.5;          // 基准重量(kg)
+    double avgWeightUpperLimit = 1.0;    // 上限重量(kg)
+    double avgWeightIncrement = 0.1;     // 递增步长(kg)
     double avgWeightSurcharge = 0.1;     // 每步长加价金额(元)
 
-    // 运行时计算的每包裹加价（非持久化，由批量计算前设置）
+    // 运行时计算的每包裹加价（非持久化）
     double runtimeAvgSurcharge = 0.0;
 };
 
@@ -84,7 +85,7 @@ struct CustomerRule {
     QString calculationMode;        // 计算模式: "实际重量"|"体积重"|"拉均重"
     bool useDefaultPrice = true;    // 是否使用默认报价
     QList<PriceRule> customPriceRules;  // 自定义报价规则
-    QString courier;                // 关联的快递公司（申通/中通/圆通/韵达/顺丰/京东）
+    QString courier;                // 关联的快递公司
 };
 
 // 区域-省份映射（默认报价表用）

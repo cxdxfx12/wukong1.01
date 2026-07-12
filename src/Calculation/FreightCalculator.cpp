@@ -77,9 +77,10 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
 
     if (effectiveWeight <= 0 && m_globalRules.noWeightDefaultPrice > 0) {
         double result = m_globalRules.noWeightDefaultPrice;
-        result = CalculationRule::applyActivityPriceIncrease(result, m_globalRules.activityRules, order.businessTime);
-        result = CalculationRule::applyTempPriceIncrease(result, m_globalRules.tempPriceIncreases, order.businessTime);
-        result = CalculationRule::applyProvincePriceIncrease(result, m_globalRules.provincePriceIncreases, order.destinationProvince);
+        QDateTime bizDt(order.businessTime, QTime(0, 0));
+        result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.activityRules, bizDt);
+        result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.tempPriceIncreases, bizDt);
+        result = CalculationRule::applyPriceIncreases(result, 0, m_globalRules.provincePriceIncreases);
         result = std::round(result * 100.0) / 100.0;
         outRuleDesc = QStringLiteral("无重量默认价");
         return result;
@@ -136,50 +137,26 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
         ruleDesc += QStringLiteral("(%1)").arg(priceRule.region);
 
     // 活动加价
-    QDateTime bizTime = QDateTime(order.businessTime, QTime(0, 0));
-    for (const ActivityRule &ar : m_globalRules.activityRules) {
-        if (ar.isInRange(bizTime)) {
+    QDateTime bizTime(order.businessTime, QTime(0, 0));
+    for (const PriceIncreaseRule &ar : m_globalRules.activityRules) {
+        if (ar.isTimeInRange(bizTime))
             ruleDesc += QStringLiteral("+%1").arg(ar.name.isEmpty() ? QStringLiteral("活动加价") : ar.name);
-        }
     }
-    freight = CalculationRule::applyActivityPriceIncrease(freight, m_globalRules.activityRules, order.businessTime);
-    freight = CalculationRule::applyTempPriceIncrease(freight, m_globalRules.tempPriceIncreases, order.businessTime);
-    freight = CalculationRule::applyProvincePriceIncrease(freight, m_globalRules.provincePriceIncreases, order.destinationProvince);
+    freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.activityRules, bizTime);
 
     // 临时加价
-    for (const TempPriceIncrease &tpi : m_globalRules.tempPriceIncreases) {
-        if (tpi.isInRange(bizTime)) {
+    for (const PriceIncreaseRule &tpi : m_globalRules.tempPriceIncreases) {
+        if (tpi.isTimeInRange(bizTime))
             ruleDesc += QStringLiteral("+%1").arg(tpi.name.isEmpty() ? QStringLiteral("临时加价") : tpi.name);
-        }
     }
+    freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.tempPriceIncreases, bizTime);
 
     // 省份加价
-    QString normOrderProv = order.destinationProvince;
-    static const QStringList suffixes2 = {
-        QStringLiteral("省"), QStringLiteral("市"),
-        QStringLiteral("自治区"), QStringLiteral("特别行政区")
-    };
-    for (const QString &sf : suffixes2) {
-        if (normOrderProv.endsWith(sf)) {
-            normOrderProv.chop(sf.size());
-            break;
-        }
-    }
-    normOrderProv = normOrderProv.trimmed();
-
-    for (const ProvincePriceIncrease &ppi : m_globalRules.provincePriceIncreases) {
-        if (!ppi.isActive) continue;
-        QString ruleProv = ppi.province;
-        for (const QString &sf : suffixes2) {
-            if (ruleProv.endsWith(sf)) {
-                ruleProv.chop(sf.size());
-                break;
-            }
-        }
-        ruleProv = ruleProv.trimmed();
-        if (ruleProv == normOrderProv || ppi.province == order.destinationProvince) {
+    freight = CalculationRule::applyPriceIncreases(freight, effectiveWeight, m_globalRules.provincePriceIncreases);
+    for (const PriceIncreaseRule &ppi : m_globalRules.provincePriceIncreases) {
+        if (ppi.isActive) {
             ruleDesc += QStringLiteral("+省份加价");
-            // 不 break：与活动加价/临时加价描述方式一致
+            break;  // 描述只写一次
         }
     }
 

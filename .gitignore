@@ -54,3 +54,4 @@ Thumbs.db
 *.zip
 package/
 Package/
+__pycache__/

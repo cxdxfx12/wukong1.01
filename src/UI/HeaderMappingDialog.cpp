@@ -41,7 +41,7 @@ QList<HeaderMappingDialog::FieldDef> HeaderMappingDialog::fieldDefs()
         {"订单客户", QStringLiteral("订单客户(店铺)"), true},
         {"客户",     QStringLiteral("结算对象(客户)"), true},
         {"目的省份", QStringLiteral("目的省份(运单送达地)"), true},
-        {"实际重量", QStringLiteral("实际重量"), false},
+        {"实际重量", QStringLiteral("结算重量(实际重量)"), true},
         {"体积重",   QStringLiteral("体积重"),   false},
         {"运费",     QStringLiteral("运费"),     false},
         {"使用的规则", QStringLiteral("使用的规则"), false},

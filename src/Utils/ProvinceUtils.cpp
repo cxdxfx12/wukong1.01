@@ -1,4 +1,5 @@
 #include "ProvinceUtils.h"
+#include <QHash>
 
 const QStringList &ProvinceUtils::getSuffixes()
 {
@@ -29,6 +30,31 @@ QString ProvinceUtils::extractTwoCharPrefix(const QString &province)
         return normalized.left(2);
     }
     return normalized;
+}
+
+QString ProvinceUtils::standardize(const QString &province)
+{
+    // 第一步：去后缀
+    QString s = normalize(province);
+    if (s.isEmpty()) return province;
+
+    // 第二步：别名 → 标准简称（报价表使用的名称）
+    static const QHash<QString, QString> alias = {
+        // 全称 → 简称
+        {QStringLiteral("新疆维吾尔"), QStringLiteral("新疆")},
+        {QStringLiteral("西藏"),      QStringLiteral("西藏")},
+        {QStringLiteral("广西壮族"),  QStringLiteral("广西")},
+        {QStringLiteral("宁夏回族"),  QStringLiteral("宁夏")},
+        {QStringLiteral("内蒙古"),   QStringLiteral("内蒙古")},
+        {QStringLiteral("黑龙江"),   QStringLiteral("黑龙江")},
+        // 直辖市（去"市"后只剩2字或更少，本身就是简称）
+        // 北京/上海/天津/重庆 normalize后已是简称
+        // 常见别名
+        {QStringLiteral("内蒙古自治区"), QStringLiteral("内蒙古")},
+    };
+
+    auto it = alias.constFind(s);
+    return it != alias.constEnd() ? it.value() : s;
 }
 
 bool ProvinceUtils::matches(const QString &input, const QString &target)

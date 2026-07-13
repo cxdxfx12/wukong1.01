@@ -7,6 +7,7 @@
 #include "xlsxworksheet.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QDateTime>
 #include <QMutex>
 #include <QAtomicInt>
@@ -165,7 +166,8 @@ QList<OrderData> ExcelEngine::readExcel(const QString &filePath, const QMap<QStr
     }
     maxCol += 2;
 
-    int estRows = countRowsFast(filePath);
+    // 用文件大小快速估算行数（1MB ~ 5000 行），避免重复解析
+    int estRows = static_cast<int>(QFileInfo(filePath).size() / 200);
     if (estRows > 0)
         allOrders.reserve(estRows + 100);
 
@@ -175,11 +177,12 @@ QList<OrderData> ExcelEngine::readExcel(const QString &filePath, const QMap<QStr
     sax_options opt;
     opt.resolve_shared_strings = true;
 
-    // ★ 遍历所有 Sheet (sheet1.xml, sheet2.xml, ...)
+    // 遍历所有 Sheet，除非标记为仅 Sheet1
+    bool sheet1Only = columnMapping.contains(QStringLiteral("__sheet1_only__"));
     for (int sheetIdx = 1; ; ++sheetIdx) {
         QString sheetPath = QStringLiteral("xl/worksheets/sheet%1.xml").arg(sheetIdx);
         QByteArray sheetXml = zip.fileData(sheetPath.toUtf8());
-        if (sheetXml.isEmpty()) break;  // 没有更多 Sheet
+        if (sheetXml.isEmpty()) break;
 
         int currentRow = 0;
         QVector<QVariant> currentRowData(maxCol);
@@ -268,6 +271,8 @@ QList<OrderData> ExcelEngine::readExcel(const QString &filePath, const QMap<QStr
 
         read_sheet_xml_sax(sheetXml, opt, &sharedStrings, onCell);
         processRow();  // 处理最后一个 Sheet 的最后一行
+
+        if (sheet1Only) break;  // ★ 仅导入 Sheet1
     }
 
     emit progressUpdated(100);

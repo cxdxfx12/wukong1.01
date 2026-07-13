@@ -1,6 +1,7 @@
 #include "FreightCalculator.h"
 #include "ThreadPool.h"
 #include "DataModel/CalculationRule.h"
+#include "Utils/ProvinceUtils.h"
 #include <QtConcurrent>
 #include <QFuture>
 #include <QFutureWatcher>
@@ -72,6 +73,9 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
 {
     outRuleDesc.clear();
 
+    // ★ 标准化省份，确保 O(1) 哈希命中
+    QString province = ProvinceUtils::standardize(province);
+
     CalculationRule::Mode mode = CalculationRule::modeFromString(rule.calculationMode);
     double effectiveWeight = CalculationRule::getEffectiveWeight(order.actualWeight, order.volumetricWeight, mode);
 
@@ -82,7 +86,7 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
         // 省份加价 — 无重量时也要匹配（PerKg 无效）
         for (const PriceIncreaseRule &ppi : m_globalRules.provincePriceIncreases) {
             if (!ppi.isActive) continue;
-            if (CalculationRule::provinceMatches(order.destinationProvince, ppi.province)) {
+            if (CalculationRule::provinceMatches(province, ppi.province)) {
                 if (ppi.mode != IncreaseMode::PerKg)  // 无重量时 PerKg 无效
                     result = getIncreaseFunc(ppi.mode)(result, 0, ppi.amount);
             }
@@ -96,7 +100,7 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
         return 0.0;
     }
 
-    PriceRule priceRule = findPriceRule(order.destinationProvince, rule);
+    PriceRule priceRule = findPriceRule(province, rule);
 
     CalculationRule::Mode calcMode = CalculationRule::modeFromString(rule.calculationMode);
 
@@ -164,7 +168,7 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
     // 省份加价
     for (const PriceIncreaseRule &ppi : m_globalRules.provincePriceIncreases) {
         if (!ppi.isActive) continue;
-        if (CalculationRule::provinceMatches(order.destinationProvince, ppi.province)) {
+        if (CalculationRule::provinceMatches(province, ppi.province)) {
             ruleDesc += increaseDesc(ppi);
             freight = getIncreaseFunc(ppi.mode)(freight, effectiveWeight, ppi.amount);
         }

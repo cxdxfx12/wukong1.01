@@ -32,6 +32,7 @@
 #include "UI/HeaderMappingDialog.h"
 #include "Calculation/SimdCalculator.h"
 #include "Utils/Logger.h"
+#include "Utils/ProvinceUtils.h"
 
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -728,6 +729,42 @@ void MainWindow::onImportClicked()
     m_currentPage = 1;
     m_lastDedupCount = 0;
 
+    // ★ 预检测关键字段，不匹配则先弹表头映射再导入
+    {
+        ExcelImporter detector;
+        QStringList headers = detector.getAvailableHeaders(filePaths.first());
+        QMap<QString, int> mapping = detector.autoDetectColumns(headers);
+
+        m_lastImportedFilePath = filePaths.first();
+        m_lastImportedHeaders = headers;
+        m_lastColumnMapping = mapping;
+
+                QStringList required = {QStringLiteral("客户"), QStringLiteral("目的省份"), QStringLiteral("实际重量")};
+        QStringList missing;
+        QMap<QString, QString> labels = {
+            {QStringLiteral("客户"),     QStringLiteral("结算对象(客户)")},
+            {QStringLiteral("目的省份"), QStringLiteral("目的省份(运单送达地)")},
+            {QStringLiteral("实际重量"), QStringLiteral("结算重量")}
+        };
+        for (const QString &f : required) {
+            if (!mapping.contains(f) || mapping[f] < 0)
+                missing.append(f);
+        }
+        if (!missing.isEmpty()) {
+            QString names;
+            for (const QString &f : missing)
+                names += QStringLiteral("「%1」").arg(labels.value(f, f));
+            QMessageBox::information(this, QStringLiteral("关键字段未匹配"),
+                QStringLiteral("以下关键字段未能自动匹配：\n%1\n\n请在弹出的表头映射对话框中手动指定。").arg(names));
+
+            m_lastImportedHeaders = headers;
+            m_lastColumnMapping = mapping;
+            m_lastImportedFilePath = filePaths.first();
+            onHeaderMappingClicked();
+            return;
+        }
+    }
+
     if (statusLabel)
         statusLabel->setText(QStringLiteral("正在导入..."));
 
@@ -774,20 +811,14 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
         try {
             int fileCount = filePaths.size();
 
-            QList<int> fileRowEstimates;
-            fileRowEstimates.resize(fileCount);
+            // ★ 不再单独 scan 行数（浪费一遍完整解析）——用文件大小估算
             int total = 0;
-
-            QList<QFuture<void>> scanFutures;
             for (int i = 0; i < fileCount; ++i) {
-                scanFutures.append(QtConcurrent::run([&, i]() {
-                    ExcelEngine engine;
-                    fileRowEstimates[i] = qMax(0, engine.countRowsFast(filePaths[i]));
-                }));
+                QFileInfo fi(filePaths[i]);
+                // 经验公式: 1MB ~ 5000 行（xlsx 压缩比约 5:1，每行约 200 字节压缩后）
+                int estRows = static_cast<int>(fi.size() / 200);
+                total += estRows;
             }
-            for (auto &f : scanFutures) f.waitForFinished();
-
-            for (int v : fileRowEstimates) total += v;
             sharedTotalRows->storeRelease(total);
 
             if (total > 0) {
@@ -817,22 +848,23 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
                 }
                 for (auto &f : importFutures) f.waitForFinished();
 
-                // ★ 运单号自动去重（运单号全局唯一，保留首次出现）
+                // ★ O(n) 去重：新建列表过滤，避免 erase() 的 O(n²) 移动
                 if (!sharedOrders->isEmpty()) {
-                    QSet<QString> seen;
                     int before = sharedOrders->size();
-                    auto it = sharedOrders->begin();
-                    while (it != sharedOrders->end()) {
-                        if (it->waybillNo.isEmpty() || seen.contains(it->waybillNo)) {
-                            it = sharedOrders->erase(it);
-                        } else {
-                            seen.insert(it->waybillNo);
-                            ++it;
+                    QSet<QString> seen;
+                    seen.reserve(before);
+                    QList<OrderData> unique;
+                    unique.reserve(before);
+                    for (const OrderData &order : *sharedOrders) {
+                        if (!order.waybillNo.isEmpty() && !seen.contains(order.waybillNo)) {
+                            seen.insert(order.waybillNo);
+                            unique.append(order);
                         }
                     }
-                    sharedTotalRows->storeRelease(sharedOrders->size());
-                    // 记录去重数量，传给回调
-                    int dupCount = before - sharedOrders->size();
+                    int after = unique.size();
+                    *sharedOrders = std::move(unique);
+                    sharedTotalRows->storeRelease(after);
+                    int dupCount = before - after;
                     QMetaObject::invokeMethod(self.data(), [self, dupCount]() {
                         if (self) self->m_lastDedupCount = dupCount;
                     }, Qt::QueuedConnection);
@@ -985,7 +1017,11 @@ void MainWindow::onCalculateClicked()
         orders = std::move(filtered);
     }
 
-    auto calcFunc = [self, orders = std::move(orders), mode, threadCount, ruleMap, firstRuleName,
+    // Province normalization: standardize all destination provinces for O(1) lookup
+    for (OrderData &o : orders)
+        o.destinationProvince = ProvinceUtils::standardize(o.destinationProvince);
+
+        auto calcFunc = [self, orders = std::move(orders), mode, threadCount, ruleMap, firstRuleName,
                      defaultPriceTable, globalRules]() mutable {
         if (!self) return;
 

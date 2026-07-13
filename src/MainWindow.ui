@@ -681,6 +681,16 @@
             </layout>
            </item>
            <item>
+            <widget class="QCheckBox" name="sheet1OnlyCheck">
+             <property name="text">
+              <string>仅导入第一个工作表</string>
+             </property>
+             <property name="toolTip">
+              <string>勾选后只读取 Sheet1，跳过其他工作表（导入速度更快）</string>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QPushButton" name="startCalcBtn">
              <property name="minimumSize">
               <size>

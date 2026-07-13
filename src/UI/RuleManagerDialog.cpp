@@ -120,7 +120,7 @@ void RuleManagerDialog::loadPriceTable()
             item->setTextAlignment(Qt::AlignCenter);
         }
         row[0]->setTextAlignment(Qt::AlignCenter);
-        row[1]->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        row[1]->setTextAlignment(Qt::AlignCenter);
 
         model->appendRow(row);
     }
@@ -128,7 +128,9 @@ void RuleManagerDialog::loadPriceTable()
     ui->priceTableView->setModel(model);
     ui->priceTableView->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     ui->priceTableView->horizontalHeader()->setStretchLastSection(false);
-    ui->priceTableView->verticalHeader()->setDefaultSectionSize(24);
+    ui->priceTableView->setColumnWidth(0, 60);
+    ui->priceTableView->verticalHeader()->setDefaultSectionSize(30);
+    ui->priceTableView->verticalHeader()->setMinimumWidth(40);
 }
 
 void RuleManagerDialog::saveCurrentPriceTable()

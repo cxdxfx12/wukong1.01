@@ -105,7 +105,13 @@ void CustomerDialog::setupUI()
     m_customPriceTable->setHorizontalHeaderLabels(QStringList()
         << QStringLiteral("省份") << QStringLiteral("首重")
         << QStringLiteral("续重") << QStringLiteral("模式"));
-    m_customPriceTable->horizontalHeader()->setStretchLastSection(true);
+    m_customPriceTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_customPriceTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
+    m_customPriceTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    m_customPriceTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    m_customPriceTable->setColumnWidth(1, 100);
+    m_customPriceTable->setColumnWidth(2, 100);
+    m_customPriceTable->setColumnWidth(3, 100);
     m_customPriceTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_customPriceTable->setMinimumHeight(150);
 

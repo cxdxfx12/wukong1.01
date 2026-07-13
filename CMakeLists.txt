@@ -8,7 +8,7 @@ if(WIN32)
     endif()
 endif()
 
-project(WukongFreight VERSION 1.2.2 LANGUAGES CXX)
+project(WukongFreight VERSION 1.2.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -54,6 +54,7 @@ set(SOURCES
     src/Utils/Logger.cpp
     src/Utils/ProvinceUtils.cpp
     src/Utils/ConfigManager.cpp
+    src/Utils/ThemeManager.cpp
     src/Auth/LoginDialog.cpp
     src/Auth/LicenseManager.cpp
 )
@@ -89,6 +90,7 @@ set(HEADERS
     src/Utils/Logger.h
     src/Utils/ProvinceUtils.h
     src/Utils/ConfigManager.h
+    src/Utils/ThemeManager.h
     src/Auth/LoginDialog.h
     src/Auth/LicenseManager.h
 )

@@ -1,6 +1,8 @@
 #include "GlobalRulesDialog.h"
 #include "Calculation/RuleManager.h"
 #include "DataModel/PriceTable.h"
+#include "Utils/ThemeManager.h"
+#include <QApplication>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -195,6 +197,24 @@ void GlobalRulesDialog::setupUI()
     }
 
     mainLayout->addWidget(m_tabWidget, 1);
+
+    // ========== 主题切换 ==========
+    auto *themeLayout = new QHBoxLayout();
+    themeLayout->setSpacing(8);
+    auto *themeLabel = new QLabel(QStringLiteral("界面风格："), this);
+    auto *themeCombo = new QComboBox(this);
+    themeCombo->addItems(ThemeManager::themeNames());
+    themeCombo->setCurrentText(ThemeManager::currentTheme());
+    themeCombo->setFixedWidth(160);
+    themeLayout->addStretch();
+    themeLayout->addWidget(themeLabel);
+    themeLayout->addWidget(themeCombo);
+    mainLayout->addLayout(themeLayout);
+
+    connect(themeCombo, &QComboBox::currentTextChanged, [](const QString &name) {
+        ThemeManager::setCurrentTheme(name);
+        qApp->setStyleSheet(ThemeManager::themeQSS(name));
+    });
 
     // ========== 底部按钮 ==========
     auto *bottomLayout = new QHBoxLayout();

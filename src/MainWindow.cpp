@@ -16,6 +16,8 @@
 #include <QDialogButtonBox>
 #include <QRegularExpression>
 #include <QPainter>
+#include <QDesktopServices>
+#include <QUrl>
 #include <memory>
 #include <functional>
 #include <xlsxdocument.h>
@@ -202,9 +204,16 @@ void MainWindow::setupStatusBar()
     auto *statusLabel = new QLabel(QStringLiteral("就绪"), this);
     statusLabel->setObjectName(QStringLiteral("statusLabel"));
 
-    auto *companyLabel = new QLabel(QStringLiteral("杭州喵喵至家网络有限公司"), this);
-    companyLabel->setObjectName(QStringLiteral("companyLabel"));
-    companyLabel->setStyleSheet(QStringLiteral("color: #999999; font-size: 10px;"));
+    auto *companyBtn = new QPushButton(QStringLiteral("杭州喵喵至家网络有限公司"), this);
+    companyBtn->setObjectName(QStringLiteral("companyLink"));
+    companyBtn->setFlat(true);
+    companyBtn->setCursor(Qt::PointingHandCursor);
+    companyBtn->setStyleSheet(QStringLiteral(
+        "QPushButton { color: #999999; font-size: 10px; border: none; background: transparent; }"
+        "QPushButton:hover { color: #2980b9; }"));
+    connect(companyBtn, &QPushButton::clicked, []() {
+        QDesktopServices::openUrl(QUrl(QStringLiteral("https://www.hbdxm.com/")));
+    });
 
     auto *recordLabel = new QLabel(QStringLiteral("记录数: 0"), this);
     recordLabel->setObjectName(QStringLiteral("recordLabel"));
@@ -213,7 +222,7 @@ void MainWindow::setupStatusBar()
     timeLabel->setObjectName(QStringLiteral("timeLabel"));
 
     statusBar()->addWidget(statusLabel, 1);
-    statusBar()->addPermanentWidget(companyLabel);
+    statusBar()->addPermanentWidget(companyBtn);
     statusBar()->addPermanentWidget(recordLabel);
     statusBar()->addPermanentWidget(timeLabel);
 }

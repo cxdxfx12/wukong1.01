@@ -7,6 +7,7 @@
 #include "MainWindow.h"
 #include "Utils/Logger.h"
 #include "Utils/ConfigManager.h"
+#include "Utils/ThemeManager.h"
 #include "Auth/LoginDialog.h"
 
 int main(int argc, char *argv[])
@@ -16,25 +17,15 @@ int main(int argc, char *argv[])
     // 应用信息
     QApplication::setApplicationName("悟空运费结算");
     QApplication::setApplicationDisplayName("悟空运费结算");
-    QApplication::setApplicationVersion("1.2.2");
+    QApplication::setApplicationVersion("1.2.3");
     QApplication::setOrganizationName("杭州喵喵至家网络有限公司");
 
     // 设置应用程序图标
     QApplication::setWindowIcon(QIcon(":/app_icon.png"));
 
-    // 加载全局样式表
-    QFile styleFile(":/style.qss");
-    if (styleFile.exists() && styleFile.open(QFile::ReadOnly | QFile::Text)) {
-        QTextStream stream(&styleFile);
-        app.setStyleSheet(stream.readAll());
-        styleFile.close();
-    } else {
-        // 使用默认样式
-        app.setStyleSheet(
-            "QPushButton { background-color: #4a90d9; color: white; border: none; "
-            "border-radius: 4px; padding: 4px 12px; font-size: 11px; min-height: 28px; }"
-        );
-    }
+    // 加载主题样式表（用户可在全局规则页切换）
+    QString savedTheme = ThemeManager::currentTheme();
+    app.setStyleSheet(ThemeManager::themeQSS(savedTheme));
 
     // 初始化日志
     QString logDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);

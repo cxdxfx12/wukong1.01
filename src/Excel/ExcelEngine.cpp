@@ -177,6 +177,15 @@ QList<OrderData> ExcelEngine::readExcel(const QString &filePath, const QMap<QStr
     sax_options opt;
     opt.resolve_shared_strings = true;
 
+    // ★ 构建列过滤器：只解析映射到的列（SAX 层跳过无关列，真正省时间）
+    QSet<int> colFilter;
+    for (auto it = columnMapping.constBegin(); it != columnMapping.constEnd(); ++it) {
+        if (it.key().startsWith(QStringLiteral("__"))) continue;  // 跳过标记位
+        if (it.value() >= 0) colFilter.insert(it.value() + 1);  // SAX col 是 1-based
+    }
+    if (!colFilter.isEmpty())
+        opt.columnFilter = &colFilter;
+
     // 遍历所有 Sheet，除非标记为仅 Sheet1
     bool sheet1Only = columnMapping.contains(QStringLiteral("__sheet1_only__"));
     for (int sheetIdx = 1; ; ++sheetIdx) {
@@ -416,10 +425,8 @@ bool ExcelEngine::writeExcel(const QString &filePath, const QList<OrderData> &or
                 xlsx.write(row, c + 1, order.actualWeight);
             } else if (header == "运费") {
                 xlsx.write(row, c + 1, order.freight);
-            } else if (header == "使用的规则") {
+            } else if (header == "计算规则和策略") {
                 xlsx.write(row, c + 1, order.usedRule);
-            } else if (header == "错误信息") {
-                xlsx.write(row, c + 1, order.errorMessage);
             }
         }
 
@@ -589,18 +596,9 @@ bool ExcelEngine::writeExcelFast(const QString &filePath, const QList<OrderData>
                             w.writeTextElement("v", QString::number(order.freight, 'f', 2));
                             w.writeEndElement();
                         }
-                    } else if (header == "使用的规则") {
+                    } else if (header == "计算规则和策略") {
                         if (!order.usedRule.isEmpty()) {
                             int sIdx = getStringIdx(order.usedRule);
-                            w.writeStartElement("c");
-                            w.writeAttribute("r", cellRef);
-                            w.writeAttribute("t", "s");
-                            w.writeTextElement("v", QString::number(sIdx));
-                            w.writeEndElement();
-                        }
-                    } else if (header == "错误信息") {
-                        if (!order.errorMessage.isEmpty()) {
-                            int sIdx = getStringIdx(order.errorMessage);
                             w.writeStartElement("c");
                             w.writeAttribute("r", cellRef);
                             w.writeAttribute("t", "s");

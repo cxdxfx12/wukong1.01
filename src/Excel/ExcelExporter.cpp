@@ -16,7 +16,7 @@ bool ExcelExporter::exportToFile(const QString &filePath, const QList<OrderData>
 {
     static const QStringList defaultHeaders = {
         "运单号", "业务时间", "体积重", "订单客户", "客户",
-        "目的省份", "实际重量", "运费", "使用的规则", "错误信息"
+        "目的省份", "实际重量", "运费", "计算规则和策略"
     };
 
     return m_engine->writeExcel(filePath, orders, defaultHeaders);

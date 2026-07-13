@@ -36,8 +36,8 @@ QMap<QString, int> HeaderMappingDialog::mapping() const
 QList<HeaderMappingDialog::FieldDef> HeaderMappingDialog::fieldDefs()
 {
     return {
-        {"运单号",   QStringLiteral("运单号"),   false},
-        {"业务时间", QStringLiteral("业务时间"), false},
+        {"运单号",   QStringLiteral("运单号"),   true},
+        {"业务时间", QStringLiteral("业务时间"), true},
         {"订单客户", QStringLiteral("订单客户(店铺)"), true},
         {"客户",     QStringLiteral("结算对象(客户)"), true},
         {"目的省份", QStringLiteral("目的省份(运单送达地)"), true},
@@ -54,8 +54,8 @@ QList<HeaderMappingDialog::FieldDef> HeaderMappingDialog::fieldDefs()
 void HeaderMappingDialog::setupUI()
 {
     setWindowTitle(QStringLiteral("表头映射"));
-    setMinimumSize(800, 560);
-    resize(840, 600);
+    setMinimumSize(900, 560);
+    resize(960, 600);
 
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(20, 16, 20, 16);
@@ -136,7 +136,7 @@ void HeaderMappingDialog::setupUI()
         if (!fd.required) continue;
 
         auto *combo = new QComboBox(quickGroup);
-        combo->setMinimumWidth(140);
+        combo->setMinimumWidth(120);
         combo->setFixedHeight(28);
         combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         combo->addItem(QStringLiteral("(不映射)"), -1);

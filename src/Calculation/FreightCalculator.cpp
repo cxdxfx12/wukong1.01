@@ -74,7 +74,7 @@ double FreightCalculator::calculateFreightDetail(const OrderData &order, const C
     outRuleDesc.clear();
 
     // ★ 标准化省份，确保 O(1) 哈希命中
-    QString province = ProvinceUtils::standardize(province);
+    QString province = ProvinceUtils::standardize(order.destinationProvince);
 
     CalculationRule::Mode mode = CalculationRule::modeFromString(rule.calculationMode);
     double effectiveWeight = CalculationRule::getEffectiveWeight(order.actualWeight, order.volumetricWeight, mode);

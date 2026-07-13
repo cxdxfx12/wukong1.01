@@ -135,6 +135,10 @@ bool read_sheet_xml_sax(const QByteArray& sheet_xml,
                     continue;
                 }
 
+                // ★ 列过滤：只解析目标列，跳过无关列
+                if (opt.columnFilter && !opt.columnFilter->contains(col))
+                    continue;
+
                 sax_cell c;
                 c.row = row;
                 c.col = col;

@@ -4,6 +4,7 @@
 #include <QXmlStreamReader>
 #include <QString>
 #include <QVariant>
+#include <QSet>
 #include <functional>
 
 namespace QXlsx {
@@ -13,6 +14,7 @@ struct sax_options
     bool resolve_shared_strings = true;
     bool read_formulas_as_text = false;
     bool stop_on_empty_sheetdata = false;
+    const QSet<int> *columnFilter = nullptr;  // ★ 非 null 时只解析这些列（1-based）
 };
 
 struct sax_cell

@@ -739,7 +739,7 @@ void MainWindow::onImportClicked()
         m_lastImportedHeaders = headers;
         m_lastColumnMapping = mapping;
 
-                QStringList required = {QStringLiteral("客户"), QStringLiteral("目的省份"), QStringLiteral("实际重量")};
+                QStringList required = {QStringLiteral("运单号"), QStringLiteral("业务时间"), QStringLiteral("客户"), QStringLiteral("目的省份"), QStringLiteral("实际重量")};
         QStringList missing;
         QMap<QString, QString> labels = {
             {QStringLiteral("客户"),     QStringLiteral("结算对象(客户)")},
@@ -774,6 +774,84 @@ void MainWindow::onImportClicked()
     ui->exportBtn->setEnabled(false);
 
     showCenterProgress(QStringLiteral("正在导入文件..."));
+    // ★ 列选择对话框
+    {
+        QStringList requiredKeys = {QStringLiteral("运单号"), QStringLiteral("业务时间"), QStringLiteral("订单客户"),
+                                     QStringLiteral("客户"), QStringLiteral("目的省份"), QStringLiteral("实际重量")};
+
+        QDialog dlg(this);
+        dlg.setWindowTitle(QStringLiteral("选择导入列"));
+        dlg.setMinimumSize(420, 480);
+        auto *dlgLayout = new QVBoxLayout(&dlg);
+        dlgLayout->addWidget(new QLabel(QStringLiteral("勾选需要导入的列（灰色=必选，不可取消）："), &dlg));
+        auto *list = new QListWidget(&dlg);
+        for (const QString &h : m_lastImportedHeaders) {
+            auto *item = new QListWidgetItem(h, list);
+            item->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
+            bool isRequired = false;
+            for (const QString &rk : requiredKeys) {
+                if (m_lastColumnMapping.contains(rk) && m_lastColumnMapping[rk] >= 0
+                    && m_lastColumnMapping[rk] < m_lastImportedHeaders.size()
+                    && m_lastImportedHeaders[m_lastColumnMapping[rk]] == h) {
+                    isRequired = true; break;
+                }
+            }
+            if (isRequired) {
+                item->setCheckState(Qt::Checked);
+                item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+            } else {
+                bool matched = false;
+                for (auto it = m_lastColumnMapping.constBegin(); it != m_lastColumnMapping.constEnd(); ++it) {
+                    if (it.value() >= 0 && it.value() < m_lastImportedHeaders.size()
+                        && m_lastImportedHeaders[it.value()] == h) {
+                        matched = true; break;
+                    }
+                }
+                item->setCheckState(matched ? Qt::Checked : Qt::Unchecked);
+            }
+        }
+        dlgLayout->addWidget(list);
+        auto *btnLayout = new QHBoxLayout();
+        auto *allBtn = new QPushButton(QStringLiteral("全选"), &dlg);
+        auto *noneBtn = new QPushButton(QStringLiteral("全不选"), &dlg);
+        auto *okBtn = new QPushButton(QStringLiteral("确定"), &dlg);
+        okBtn->setObjectName(QStringLiteral("primaryButton"));
+        btnLayout->addWidget(allBtn); btnLayout->addWidget(noneBtn);
+        btnLayout->addStretch(); btnLayout->addWidget(okBtn);
+        dlgLayout->addLayout(btnLayout);
+
+        QObject::connect(allBtn, &QPushButton::clicked, [&]() {
+            for (int i = 0; i < list->count(); ++i) {
+                if (list->item(i)->flags() & Qt::ItemIsEnabled)
+                    list->item(i)->setCheckState(Qt::Checked);
+            }
+        });
+        QObject::connect(noneBtn, &QPushButton::clicked, [&]() {
+            for (int i = 0; i < list->count(); ++i) {
+                if (list->item(i)->flags() & Qt::ItemIsEnabled)
+                    list->item(i)->setCheckState(Qt::Unchecked);
+            }
+        });
+        QObject::connect(okBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+
+        if (dlg.exec() != QDialog::Accepted)
+            return;
+
+        for (int i = 0; i < list->count(); ++i) {
+            if (list->item(i)->checkState() != Qt::Checked) {
+                QString header = list->item(i)->text();
+                for (auto it = m_lastColumnMapping.begin(); it != m_lastColumnMapping.end(); ) {
+                    int col = it.value();
+                    if (col >= 0 && col < m_lastImportedHeaders.size() && m_lastImportedHeaders[col] == header)
+                        it = m_lastColumnMapping.erase(it);
+                    else
+                        ++it;
+                }
+            }
+        }
+    }
+
+
     emit importProgress(0);
 
     importFilesAsync(filePaths);

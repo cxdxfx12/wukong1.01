@@ -1,7 +1,7 @@
-// 应用程序图标
+// Application icon
 1 ICON "app_icon.ico"
 
-// ★ VERSIONINFO — 防杀软误报，声明软件身份
+// VERSIONINFO — ASCII names to avoid windres encoding issues
 #include <windows.h>
 
 VS_VERSION_INFO VERSIONINFO
@@ -17,14 +17,14 @@ BEGIN
     BEGIN
         BLOCK "080404B0"
         BEGIN
-            VALUE "CompanyName",      "杭州喵喵至家网络有限公司"
-            VALUE "FileDescription",  "悟空运费结算"
-            VALUE "FileVersion",      "1.2.0"
+            VALUE "CompanyName",      "WukongFreight"
+            VALUE "FileDescription",  "WukongFreight"
+            VALUE "FileVersion",      "1.2.1"
             VALUE "InternalName",     "WukongFreight"
-            VALUE "LegalCopyright",   "Copyright (C) 2026 杭州喵喵至家"
-            VALUE "OriginalFilename", "悟空结算.exe"
-            VALUE "ProductName",      "悟空运费结算"
-            VALUE "ProductVersion",   "1.2.0"
+            VALUE "LegalCopyright",   "(C) 2026"
+            VALUE "OriginalFilename", "WukongFreight.exe"
+            VALUE "ProductName",      "WukongFreight"
+            VALUE "ProductVersion",   "1.2.1"
         END
     END
     BLOCK "VarFileInfo"

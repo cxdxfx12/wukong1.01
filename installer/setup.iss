@@ -1,11 +1,11 @@
 ; 悟空运费结算 — Inno Setup 安装包脚本
 ; 使用: "C:\Program Files\Inno Setup 6\ISCC.exe" setup.iss
-; 输出: 悟空结算_v1.2.0_Setup.exe
+; 输出: 悟空结算_v1.2.1_Setup.exe
 
 [Setup]
 AppId={{8F3A5C2D-1E6B-4A9D-8F3E-7B2C1D5A8E9F}
 AppName=悟空运费结算
-AppVersion=1.2.0
+AppVersion=1.2.1
 AppPublisher=杭州喵喵至家网络有限公司
 DefaultDirName={autopf}\悟空运费结算
 DefaultGroupName=悟空运费结算
@@ -13,7 +13,7 @@ UninstallDisplayIcon={app}\悟空结算.exe
 Compression=lzma2/max
 SolidCompression=yes
 OutputDir=.
-OutputBaseFilename=悟空结算_v1.2.0_Setup
+OutputBaseFilename=悟空结算_v1.2.1_Setup
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
 WizardStyle=modern

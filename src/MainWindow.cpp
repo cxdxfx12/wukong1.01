@@ -149,7 +149,8 @@ void MainWindow::setupConnections()
     connect(ui->startCalcBtn, &QPushButton::clicked, this, &MainWindow::onCalculateClicked);
     connect(ui->ruleHelpBtn, &QPushButton::clicked, this, &MainWindow::onRuleHelpClicked);  // 新增：规则说明按钮
     connect(ui->historyBtn, &QPushButton::clicked, this, &MainWindow::onHistoryClicked);    // 新增：历史记录按钮
-    connect(ui->chartBtn, &QPushButton::clicked, this, &MainWindow::onChartClicked);      // 新增：生成图表按钮
+    connect(ui->chartBtn, &QPushButton::clicked, this, &MainWindow::onChartClicked);
+    connect(ui->clearBtn, &QPushButton::clicked, this, &MainWindow::onClearClicked);      // 新增：生成图表按钮
 
     connect(m_calculator, &FreightCalculator::progressUpdated, this, &MainWindow::throttledProgress);
     connect(m_calculator, &FreightCalculator::calculationComplete, this, &MainWindow::onCalculationComplete);
@@ -419,6 +420,16 @@ void MainWindow::setupToolbarIcons()
     }, SIZE, PAD, chartColor));
     ui->chartBtn->setIconSize(ICON_SIZE);
     styleToolbarBtn(ui->chartBtn, chartColor);
+
+    // ========== 10. clearBtn ==========
+    QColor clearColor("#95a5a6");
+    ui->clearBtn->setIcon(makeIcon([](QPainter& p, const QRect& r) {
+        int cx = r.center().x(), cy = r.center().y();
+        p.drawLine(r.left()+3, r.top()+3, r.right()-3, r.bottom()-3);
+        p.drawLine(r.right()-3, r.top()+3, r.left()+3, r.bottom()-3);
+    }, SIZE, PAD, clearColor));
+    ui->clearBtn->setIconSize(ICON_SIZE);
+    styleToolbarBtn(ui->clearBtn, clearColor);
 }
 
 void MainWindow::showCenterProgress(const QString &text)
@@ -1042,6 +1053,8 @@ void MainWindow::onCalculateClicked()
 
     ui->startCalcBtn->setEnabled(false);
     ui->calculateBtn->setEnabled(false);
+    ui->importBtn->setEnabled(false);
+    ui->headerMappingBtn->setEnabled(false);
     ui->progressBar->setValue(0);
 
     showCenterProgress(QStringLiteral("正在计算运费..."));
@@ -1481,6 +1494,8 @@ void MainWindow::onCalculationComplete(int totalCount, int errorCount)
     hideCenterProgress();
     ui->startCalcBtn->setEnabled(true);
     ui->calculateBtn->setEnabled(true);
+    ui->importBtn->setEnabled(true);
+    ui->headerMappingBtn->setEnabled(true);
     ui->progressBar->setValue(100);
 
     m_currentPage = 1;
@@ -1573,6 +1588,10 @@ void MainWindow::displayPage(int page)
 {
     int totalCount = m_currentOrders.size();
     if (totalCount == 0) {
+        // 清除旧数据
+        QAbstractItemModel *oldModel = ui->dataTableView->model();
+        ui->dataTableView->setModel(new QStandardItemModel(this));
+        delete oldModel;
         updatePageInfo();
         return;
     }
@@ -1845,6 +1864,30 @@ void MainWindow::onChartClicked()
 
     ChartDialog dialog(validOrders, m_currentCalcMode, this);
     dialog.exec();
+}
+
+void MainWindow::onClearClicked()
+{
+    if (m_isCalculating) return;
+
+    m_currentOrders.clear();
+    m_currentFilePaths.clear();
+    m_currentPage = 1;
+    m_totalPages = 1;
+    m_isCalculating = false;
+    m_lastDedupCount = 0;
+    m_lastImportedHeaders.clear();
+    m_lastColumnMapping.clear();
+    m_lastImportedFilePath.clear();
+    m_calcTotalRows = 0;
+
+    updateTableView();
+    ui->progressBar->setValue(0);
+
+    auto *statusLabel = statusBar()->findChild<QLabel*>(QStringLiteral("statusLabel"));
+    if (statusLabel) statusLabel->setText(QStringLiteral("就绪"));
+    auto *recordLabel = statusBar()->findChild<QLabel*>(QStringLiteral("recordLabel"));
+    if (recordLabel) recordLabel->setText(QStringLiteral("记录数: 0"));
 }
 
 void MainWindow::onCourierChanged(const QString &courier)

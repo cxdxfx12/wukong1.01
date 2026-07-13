@@ -56,6 +56,7 @@ private slots:
     void onHeaderMappingClicked(); // 新增：表头映射
     void onRuleHelpClicked();  // 新增：规则说明
     void onHistoryClicked();   // 新增：历史记录
+    void onClearClicked();     // 清除：重置所有数据
     void onChartClicked();     // 新增：生成图表
 
 private:

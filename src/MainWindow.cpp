@@ -852,6 +852,7 @@ void MainWindow::onImportClicked()
             if (list->item(i)->checkState() != Qt::Checked) {
                 QString header = list->item(i)->text();
                 for (auto it = m_lastColumnMapping.begin(); it != m_lastColumnMapping.end(); ) {
+                    if (it.key().startsWith(QStringLiteral("__"))) { ++it; continue; }  // skip marker keys
                     int col = it.value();
                     if (col >= 0 && col < m_lastImportedHeaders.size() && m_lastImportedHeaders[col] == header)
                         it = m_lastColumnMapping.erase(it);
@@ -862,13 +863,12 @@ void MainWindow::onImportClicked()
         }
     }
 
-
     emit importProgress(0);
 
-    importFilesAsync(filePaths);
+    importFilesAsync(filePaths, false, ui->sheet1OnlyCheck->isChecked());
 }
 
-void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExistingMapping)
+void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExistingMapping, bool sheet1Only)
 {
     m_totalFileCount = filePaths.size();
     m_processedFileCount = 0;
@@ -892,11 +892,12 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
     auto sharedMaxProgress = std::make_shared<QAtomicInt>(0);
 
     QMap<QString, int> columnMapping = m_lastColumnMapping;
+    auto sharedSheet1Only = std::make_shared<bool>(sheet1Only);
 
     emit importProgress(0);
 
     auto processFunc = [self, filePaths, sharedOrders, sharedMutex, sharedProcessedRows,
-                        sharedTotalRows, sharedMaxProgress, columnMapping]() {
+                        sharedTotalRows, sharedMaxProgress, sharedSheet1Only, columnMapping]() {
         try {
             int fileCount = filePaths.size();
 
@@ -918,7 +919,25 @@ void MainWindow::importFilesAsync(const QStringList &filePaths, bool useExisting
                 for (int i = 0; i < fileCount; ++i) {
                     importFutures.append(QtConcurrent::run([&, i]() {
                         ExcelImporter importer;
-                        QList<OrderData> orders = importer.importFromFile(filePaths[i], columnMapping);
+                        QMap<QString, int> cm = columnMapping;
+                        if (*sharedSheet1Only) cm[QStringLiteral("__sheet1_only__")] = 1;
+
+                        // ★ 文件内部进度信号 → 实时更新进度条
+                        QObject::connect(&importer, &ExcelImporter::progressUpdated, self.data(),
+                            [&](int filePct) {
+                                int localDone = static_cast<int>(filePct / 100.0 * static_cast<int>(QFileInfo(filePaths[i]).size() / 200));
+                                int globalDone = sharedProcessedRows->loadAcquire() + localDone;
+                                int tot = sharedTotalRows->loadAcquire();
+                                if (tot > 0) {
+                                    int pct = static_cast<int>(globalDone * 100.0 / tot);
+                                    int prev = sharedMaxProgress->loadAcquire();
+                                    while (pct > prev && !sharedMaxProgress->testAndSetOrdered(prev, pct))
+                                        prev = sharedMaxProgress->loadAcquire();
+                                    if (pct > prev && self) self->importProgress(pct);
+                                }
+                            }, Qt::QueuedConnection);
+
+                        QList<OrderData> orders = importer.importFromFile(filePaths[i], cm);
 
                         QMutexLocker locker(sharedMutex.get());
                         sharedOrders->append(orders);
@@ -1723,7 +1742,7 @@ void MainWindow::onHeaderMappingClicked()
 
     showCenterProgress(QStringLiteral("\u6b63\u5728\u91cd\u65b0\u5bfc\u5165..."));
 
-    importFilesAsync(m_currentFilePaths, true);
+    importFilesAsync(m_currentFilePaths, true, ui->sheet1OnlyCheck->isChecked());
 }
 
 void MainWindow::onRuleHelpClicked()

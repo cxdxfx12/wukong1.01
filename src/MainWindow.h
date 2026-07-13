@@ -85,8 +85,8 @@ private:
     BannerWidget *m_bannerWidget = nullptr;
 
     bool m_isCalculating = false;
-    int m_calcTotalRows = 0;  // 当前计算的总行数，进度显示用
-
+    int m_calcTotalRows = 0;
+    
     // 表头映射上下文（用于重新导入）
     QStringList m_lastImportedHeaders;
     QMap<QString, int> m_lastColumnMapping;
@@ -109,7 +109,8 @@ private:
     void updateTableView();
     void updateCustomerCombo();
     void applyLightStyle();
-    void importFilesAsync(const QStringList &filePaths, bool useExistingMapping = false);
+    void importFilesAsync(const QStringList &filePaths, bool useExistingMapping = false,
+                          bool sheet1Only = true);
     void exportFilesAsync(const QString &outputDir, bool mergeExport, bool perClientExport);
 
     void showCenterProgress(const QString &text);

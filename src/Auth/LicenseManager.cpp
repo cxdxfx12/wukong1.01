@@ -14,6 +14,10 @@
 static const QByteArray APP_SECRET = QByteArrayLiteral("WukongFreight2026@v1.0");
 static const int TRIAL_DAYS = 7;
 
+// 缓存：整个进程只计算一次，避免 wmic 非确定性导致显示和验证不一致
+static QString s_cachedMachineCode;
+static QString s_cachedFingerprint;
+
 LicenseManager::LicenseManager()
 {
     loadLicenseFromFile();
@@ -21,23 +25,25 @@ LicenseManager::LicenseManager()
 
 QString LicenseManager::generateMachineCode()
 {
-    QString fingerprint = computeHardwareFingerprint();
-    if (fingerprint.isEmpty()) {
-        // 备用方案：基于随机种子生成固定ID
-        fingerprint = QStringLiteral("WKFALLBACK");
-    }
+    if (!s_cachedMachineCode.isEmpty())
+        return s_cachedMachineCode;
 
-    // 取前16位作为机器码显示，但完整指纹用于验证
+    QString fingerprint = computeHardwareFingerprint();
+    if (fingerprint.isEmpty())
+        fingerprint = QStringLiteral("WKFALLBACK");
+
+    s_cachedFingerprint = fingerprint;
+
     QByteArray hash = QCryptographicHash::hash(
         fingerprint.toUtf8(), QCryptographicHash::Sha256
     ).toHex().toUpper();
 
-    // 格式化为 XXXX-XXXX-XXXX-XXXX
     QString code;
     for (int i = 0; i < 16 && i < hash.length(); ++i) {
         if (i > 0 && i % 4 == 0) code += '-';
         code += hash[i];
     }
+    s_cachedMachineCode = code;
     return code;
 }
 
@@ -279,12 +285,14 @@ bool LicenseManager::loadLicenseFromFile()
     QString licenseKey = obj.value(QStringLiteral("licenseKey")).toString();
     QString storedFingerprint = obj.value(QStringLiteral("fingerprint")).toString();
 
-    QString currentFingerprint = computeHardwareFingerprint();
+    // 先初始化缓存指纹（generateMachineCode 可能尚未被调用）
+    if (s_cachedFingerprint.isEmpty())
+        generateMachineCode();
 
     // 硬件指纹可能有轻微波动（wmic 返回值不稳定），仅记录警告，不拒绝授权
-    if (!storedFingerprint.isEmpty() && storedFingerprint != currentFingerprint) {
+    if (!storedFingerprint.isEmpty() && storedFingerprint != s_cachedFingerprint) {
         qDebug() << "LicenseManager: hardware fingerprint changed (non-fatal)"
-                 << storedFingerprint.left(16) << "vs" << currentFingerprint.left(16);
+                 << storedFingerprint.left(16) << "vs" << s_cachedFingerprint.left(16);
     }
 
     if (!licenseKey.isEmpty()) {
@@ -307,7 +315,7 @@ bool LicenseManager::loadLicenseFromFile()
     if (trialStart.isValid()) {
         m_license.isTrial = true;
         m_license.expireDate = trialStart.addDays(TRIAL_DAYS);
-        m_license.hardwareFingerprint = currentFingerprint;
+        m_license.hardwareFingerprint = s_cachedFingerprint;
     }
 
     initTrialIfNeeded();

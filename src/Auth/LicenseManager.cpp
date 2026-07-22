@@ -289,7 +289,15 @@ bool LicenseManager::loadLicenseFromFile()
     }
 
     if (!licenseKey.isEmpty()) {
-        return validateLicense(licenseKey);
+        // 指纹已验证一致，直接信任已保存的授权，不再重新计算机器码
+        LicenseInfo info;
+        if (parseLicenseKey(licenseKey, info)) {
+            info.isValid = true;
+            info.licenseKey = licenseKey;
+            m_license = info;
+            return true;
+        }
+        return false;
     }
 
     // 检查是否有试用记录

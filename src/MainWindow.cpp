@@ -1688,13 +1688,8 @@ void MainWindow::updateCustomerCombo()
 void MainWindow::setupBanner()
 {
     m_bannerWidget = new BannerWidget(this);
-    m_bannerWidget->setTexts({
-        QStringLiteral("用C++打造的专业快递软件"),
-        QStringLiteral("简单、易用、快速"),
-        QStringLiteral("专业服务于快递网点财务运费结算")
-    });
-    m_bannerWidget->setInterval(3000);
-    m_bannerWidget->setFixedHeight(40);
+    m_bannerWidget->setInterval(4000);
+    m_bannerWidget->setFixedHeight(64);
 
     auto *layout = new QVBoxLayout(ui->bannerPlaceholder);
     layout->addWidget(m_bannerWidget);

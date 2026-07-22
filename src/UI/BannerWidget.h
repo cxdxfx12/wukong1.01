@@ -5,29 +5,29 @@
 #include <QTimer>
 #include <QList>
 #include <QString>
-
-class QLabel;
-class QVBoxLayout;
+#include <QColor>
+#include <QPainter>
 
 class BannerWidget : public QWidget {
     Q_OBJECT
 public:
     explicit BannerWidget(QWidget *parent = nullptr);
+    void setInterval(int ms);
 
-    void setTexts(const QStringList &texts);
-    void setInterval(int milliseconds);
+protected:
+    void paintEvent(QPaintEvent *e) override;
+    void mousePressEvent(QMouseEvent *e) override;
 
 private slots:
-    void showNextText();
+    void showNext();
 
 private:
-    void updateDisplay();
+    void drawSlide(QPainter &p, int index);
 
-    QLabel *m_textLabel;
     QTimer *m_timer;
-    QStringList m_texts;
-    int m_currentIndex;
-    int m_interval;
+    int m_current = 0;
+    int m_interval = 4000;
+    float m_fadeProgress = 1.0f; // unused for now, simple swap
 };
 
-#endif // BANNERWIDGET_H
+#endif

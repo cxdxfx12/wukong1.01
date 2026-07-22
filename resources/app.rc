@@ -19,12 +19,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "WukongFreight"
             VALUE "FileDescription",  "WukongFreight"
-            VALUE "FileVersion",      "1.2.7"
+            VALUE "FileVersion",      "1.2.8"
             VALUE "InternalName",     "WukongFreight"
             VALUE "LegalCopyright",   "(C) 2026"
             VALUE "OriginalFilename", "WukongFreight.exe"
             VALUE "ProductName",      "WukongFreight"
-            VALUE "ProductVersion",   "1.2.7"
+            VALUE "ProductVersion",   "1.2.8"
         END
     END
     BLOCK "VarFileInfo"

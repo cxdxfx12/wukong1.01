@@ -55,9 +55,7 @@ LoginDialog::LoginDialog(QWidget *parent)
 
     if (m_licenseManager->isAuthorized()) {
         m_authorized = true;
-        if (!m_licenseManager->isTrialValid() || m_licenseManager->currentLicense().isValid) {
-            QTimer::singleShot(800, this, [this]() { accept(); });
-        }
+        QTimer::singleShot(300, this, [this]() { accept(); });
     }
 }
 

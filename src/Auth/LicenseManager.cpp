@@ -281,11 +281,10 @@ bool LicenseManager::loadLicenseFromFile()
 
     QString currentFingerprint = computeHardwareFingerprint();
 
-    // 检查硬件是否变更
+    // 硬件指纹可能有轻微波动（wmic 返回值不稳定），仅记录警告，不拒绝授权
     if (!storedFingerprint.isEmpty() && storedFingerprint != currentFingerprint) {
-        // 硬件变更，许可证失效（除非用户重新激活）
-        m_license.isValid = false;
-        return false;
+        qDebug() << "LicenseManager: hardware fingerprint changed (non-fatal)"
+                 << storedFingerprint.left(16) << "vs" << currentFingerprint.left(16);
     }
 
     if (!licenseKey.isEmpty()) {

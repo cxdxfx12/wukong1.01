@@ -45,15 +45,13 @@ bool CalculationRule::isWeightInRange(double weight, const WeightSegment &segmen
 double CalculationRule::calculateStandard(double weight, const WeightSegment &segment) {
     double firstWeightPrice = segment.firstWeightPrice;
     double additionalPrice = segment.additionalPrice;
-    double firstWeight = segment.minWeight;
 
-    if (segment.maxWeight < 0 && segment.minWeight >= 30) {
-        firstWeight = 3.0;
+    // 有续重价的段：首重价 + 重量kg × 续重价（不扣除首重公斤数）
+    if (additionalPrice > 0) {
+        return firstWeightPrice + weight * additionalPrice;
     }
-
-    double extraWeight = weight - firstWeight;
-    if (extraWeight < 0) extraWeight = 0;
-    return firstWeightPrice + extraWeight * additionalPrice;
+    // 无续重的段：只收首重价
+    return firstWeightPrice;
 }
 
 double CalculationRule::calculateStandard(double weight, const QList<WeightSegment> &segments) {

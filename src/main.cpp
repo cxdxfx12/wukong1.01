@@ -9,6 +9,7 @@
 #include "Utils/ConfigManager.h"
 #include "Utils/ThemeManager.h"
 #include "Auth/LoginDialog.h"
+#include "Auth/LicenseManager.h"
 
 int main(int argc, char *argv[])
 {
@@ -17,7 +18,7 @@ int main(int argc, char *argv[])
     // 应用信息
     QApplication::setApplicationName("悟空运费结算");
     QApplication::setApplicationDisplayName("悟空运费结算");
-    QApplication::setApplicationVersion("1.2.8");
+    QApplication::setApplicationVersion("1.2.9");
     QApplication::setOrganizationName("杭州喵喵至家网络有限公司");
 
     // 设置应用程序图标
@@ -37,11 +38,16 @@ int main(int argc, char *argv[])
     }
     Logger::instance().info("Application started");
 
-    // 显示授权登录对话框
-    LoginDialog loginDlg;
-    if (loginDlg.exec() != QDialog::Accepted || !loginDlg.isAuthorized()) {
-        Logger::instance().info("Authorization failed or cancelled");
-        return 0;
+    // 如果已有有效授权文件，跳过登录
+    LicenseManager preChecker;
+    bool alreadyAuthorized = preChecker.isAuthorized();
+
+    if (!alreadyAuthorized) {
+        LoginDialog loginDlg;
+        if (loginDlg.exec() != QDialog::Accepted || !loginDlg.isAuthorized()) {
+            Logger::instance().info("Authorization failed or cancelled");
+            return 0;
+        }
     }
 
     Logger::instance().info("Authorization passed");

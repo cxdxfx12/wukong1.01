@@ -239,8 +239,8 @@ bool LicenseManager::verifyLicenseKey(const QString &licenseKey, const QString &
     ).toHex().toUpper();
     QString expectedSign = expectedHash.left(8);
 
-    // 兼容8位和32位签名
-    return parts[6] == expectedSign || parts[6].left(8) == expectedSign;
+    // 兼容8/32/64位签名（生成器可能输出不同长度）
+    return parts[6].left(8) == expectedSign;
 }
 
 bool LicenseManager::parseLicenseKey(const QString &licenseKey, LicenseInfo &info)
